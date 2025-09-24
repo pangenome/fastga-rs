@@ -1,0 +1,3 @@
+[submodule "deps/fastga"]
+	path = deps/fastga
+	url = https://github.com/thegenemyers/FASTGA.git

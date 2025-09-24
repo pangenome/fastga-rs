@@ -1,0 +1,24 @@
+[package]
+name = "fastga-rs"
+version = "0.1.0"
+edition = "2021"
+authors = ["FastGA Rust Bindings Contributors"]
+license = "MIT OR Apache-2.0"
+description = "Rust bindings for FastGA genome aligner with extended CIGAR support"
+repository = "https://github.com/yourusername/fastga-rs"
+keywords = ["genomics", "alignment", "bioinformatics", "fastga"]
+categories = ["science", "api-bindings"]
+
+[dependencies]
+thiserror = "1.0"
+anyhow = "1.0"
+tempfile = "3.8"
+libc = "0.2"
+num_cpus = "1.16"
+
+[build-dependencies]
+cc = "1.0"
+pkg-config = "0.3"
+
+[dev-dependencies]
+pretty_assertions = "1.4"
