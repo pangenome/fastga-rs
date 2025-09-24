@@ -3,6 +3,8 @@
 //! This module provides low-level unsafe bindings to the FastGA C library.
 //! These bindings are wrapped by the safe API in the parent module.
 
+pub mod streaming;
+
 use libc::{c_char, c_int, c_void, size_t};
 use std::ffi::CString;
 use std::ptr;

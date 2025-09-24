@@ -27,6 +27,7 @@ fn main() {
         "deps/fastga/hash.c",
         "deps/fastga/select.c",
         "deps/fastga/ALNtoPAF.c",
+        "deps/fastga_lib.c",  // Our streaming interface
     ];
 
     // Build the FastGA library

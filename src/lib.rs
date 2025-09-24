@@ -59,6 +59,7 @@
 pub mod alignment;
 pub mod config;
 pub mod error;
+pub mod streaming;
 mod ffi;
 
 use std::path::Path;
@@ -252,10 +253,15 @@ impl FastGA {
     where
         F: FnMut(Alignment) -> bool,
     {
-        // This will use the FFI bindings to hook into FastGA's internal
-        // alignment generation and call the callback for each alignment
-        // TODO: Implement using FFI bindings
-        unimplemented!("Streaming alignment API will be implemented with FFI bindings")
+        // Use the streaming API
+        let mut aligner = streaming::StreamingAligner::new(self.config.clone());
+        let stats = aligner.align_files(genome1, genome2, callback)?;
+
+        eprintln!("Streaming alignment complete: {} alignments processed, {} kept",
+                  stats.total_alignments,
+                  stats.kept_alignments);
+
+        Ok(())
     }
 
     /// Aligns a single query sequence against all sequences in a target file.
@@ -274,8 +280,13 @@ impl FastGA {
     where
         F: Fn(&Alignment) -> bool,
     {
-        // TODO: Implement using lower-level FFI bindings
-        unimplemented!("Query-vs-all API will be implemented with FFI bindings")
+        let mut aligner = streaming::StreamingAligner::new(self.config.clone());
+
+        if let Some(filter_fn) = filter {
+            aligner.filter(filter_fn);
+        }
+
+        aligner.align_query_vs_all(query, target_file, |_| true)
     }
 }
 
