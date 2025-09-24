@@ -61,6 +61,7 @@ pub mod config;
 pub mod error;
 pub mod streaming;
 pub mod embedded;
+pub mod query_set;
 mod ffi;
 
 use std::path::Path;
@@ -72,6 +73,7 @@ use error::Result;
 pub use alignment::{Alignment, Alignments};
 pub use config::Config;
 pub use error::FastGAError;
+pub use query_set::{QueryAlignmentSet, QueryAlignmentIterator, align_queries};
 
 /// Main interface to the FastGA alignment engine.
 ///

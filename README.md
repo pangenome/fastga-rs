@@ -6,10 +6,11 @@ A Rust library providing safe, embedded bindings for [FastGA](https://github.com
 
 - **Embedded binaries**: No external dependencies - FastGA is compiled and embedded directly into your Rust binary
 - **Extended CIGAR format**: Generates alignments with explicit match ('=') and mismatch ('X') operators
-- **Streaming API**: Process alignments as they're generated without storing everything in memory
+- **Query-complete alignment sets**: Get ALL alignments for each query before processing the next
+- **Automatic backpressure**: Prevents memory overflow when processing large datasets
 - **Identity scoring**: Calculates alignment identity for downstream filtering algorithms
 - **Thread-safe**: Supports parallel alignment operations
-- **Memory efficient**: Suitable for large genome alignments
+- **Memory efficient**: Bounded memory usage with streaming
 
 ## Installation
 
@@ -54,35 +55,88 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ## Advanced Usage
 
-### Streaming API
+### Query-Complete Alignment Sets
 
-Process alignments as they're generated without loading everything into memory:
+**IMPORTANT**: FastGA processes queries sequentially and completes ALL alignments for each query before moving to the next. This allows you to get complete alignment sets for each query:
 
 ```rust
-use fastga_rs::streaming::StreamingAligner;
-use fastga_rs::Config;
+use fastga_rs::{QueryAlignmentIterator, Config};
 
-let mut aligner = StreamingAligner::new(Config::default());
-
-// Add filters
-aligner
-    .filter_min_identity(0.9)
-    .filter_min_length(1000);
-
-// Process alignments with a callback
-let stats = aligner.align_files(
-    "genome1.fa",
-    "genome2.fa",
-    |alignment| {
-        // Process each alignment as it's generated
-        println!("Found: {} -> {}",
-                 alignment.query_name,
-                 alignment.target_name);
-        true  // Keep alignment
-    }
+// Create iterator with backpressure (won't overflow memory)
+let query_sets = QueryAlignmentIterator::new(
+    "queries.fa",      // Multiple query sequences
+    "targets.fa",      // Target database
+    Config::default(),
+    1,                 // Buffer size (1 = strict backpressure)
 )?;
 
-println!("Processed {} alignments", stats.total_alignments);
+// Process each query's complete alignment set
+for query_set in query_sets {
+    let query_set = query_set?;
+
+    println!("Query: {} has {} alignments",
+             query_set.query_name,
+             query_set.alignment_count());
+
+    // All alignments for this query are available
+    for alignment in &query_set.alignments {
+        println!("  -> {} (identity: {:.1}%)",
+                 alignment.target_name,
+                 alignment.identity() * 100.0);
+    }
+
+    // Get best hit
+    if let Some(best) = query_set.best_by_identity() {
+        println!("Best hit: {} at {:.1}% identity",
+                 best.target_name,
+                 best.identity() * 100.0);
+    }
+}
+```
+
+### Simple Query Processing
+
+For simpler use cases, use the high-level API:
+
+```rust
+use fastga_rs::{align_queries, Config};
+
+align_queries(
+    "queries.fa",
+    "targets.fa",
+    Config::default(),
+    |query_set| {
+        // Process complete alignment set for this query
+        println!("Processing {} with {} hits",
+                 query_set.query_name,
+                 query_set.alignment_count());
+
+        // Return true to continue, false to stop
+        Ok(true)
+    }
+)?;
+```
+
+### Memory-Efficient Streaming
+
+The query iterator uses bounded channels with backpressure. When you process slowly, FastGA automatically pauses, preventing memory overflow:
+
+```rust
+let query_sets = QueryAlignmentIterator::new(
+    "huge_queries.fa",
+    "huge_database.fa",
+    Config::default(),
+    1,  // Only buffer 1 query ahead (strict backpressure)
+)?;
+
+for query_set in query_sets {
+    let query_set = query_set?;
+
+    // FastGA is paused here if we're slow!
+    expensive_computation(&query_set)?;
+
+    // FastGA resumes when we loop back
+}
 ```
 
 ### Configuration Presets
