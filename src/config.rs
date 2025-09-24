@@ -52,7 +52,7 @@ impl Default for Config {
         Config {
             min_alignment_length: 100,
             min_identity: None,
-            num_threads: num_cpus::get(),
+            num_threads: num_cpus::get().max(1),  // Ensure at least 1 thread
             chain_break: 2000,
             chain_min: 170,
             frequency: 10,

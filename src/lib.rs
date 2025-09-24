@@ -22,6 +22,8 @@
 //! ## Example Usage
 //!
 //! ```no_run
+//! # use anyhow::Result;
+//! # fn main() -> Result<()> {
 //! use fastga_rs::{FastGA, Config};
 //! use std::path::Path;
 //!
@@ -37,6 +39,8 @@
 //! // Get alignments in PAF format with extended CIGAR
 //! let paf_output = alignments.to_paf()?;
 //! println!("{}", paf_output);
+//! # Ok(())
+//! # }
 //! ```
 //!
 //! ## Architecture
@@ -85,6 +89,8 @@ impl FastGA {
     ///
     /// # Example
     /// ```no_run
+    /// # use anyhow::Result;
+    /// # fn main() -> Result<()> {
     /// use fastga_rs::{FastGA, Config};
     ///
     /// let config = Config::builder()
@@ -94,6 +100,8 @@ impl FastGA {
     ///     .build();
     ///
     /// let aligner = FastGA::new(config)?;
+    /// # Ok(())
+    /// # }
     /// ```
     pub fn new(config: Config) -> Result<Self> {
         Ok(FastGA { config })
@@ -161,15 +169,30 @@ impl FastGA {
 
     /// Executes FastGA binary with appropriate parameters.
     fn run_fastga(&self, genome1: &Path, genome2: &Path, _temp_dir: &TempDir) -> Result<String> {
-        // Build FastGA command with -pafx flags for PAF output with extended CIGAR
-        let mut cmd = Command::new("FastGA");
+        // Use the FastGA binary from our deps directory
+        let fastga_bin = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("deps")
+            .join("fastga")
+            .join("FastGA");
 
+        if !fastga_bin.exists() {
+            return Err(FastGAError::Other(format!(
+                "FastGA binary not found at {:?}. Run 'make' in deps/fastga directory",
+                fastga_bin
+            )));
+        }
+
+        // Build FastGA command with -pafx flags for PAF output with extended CIGAR
+        let mut cmd = Command::new(&fastga_bin);
+
+        // FastGA expects arguments in the form -T<value> (no space)
         cmd.arg("-pafx")  // PAF output with extended CIGAR
-            .arg("-T").arg(self.config.num_threads.to_string())
-            .arg("-l").arg(self.config.min_alignment_length.to_string());
+            .arg(format!("-T{}", self.config.num_threads))
+            .arg(format!("-l{}", self.config.min_alignment_length));
 
         if let Some(min_id) = self.config.min_identity {
-            cmd.arg("-e").arg(format!("{:.2}", 1.0 - min_id));
+            // FastGA uses -i for identity threshold
+            cmd.arg(format!("-i{:.2}", min_id));
         }
 
         cmd.arg(genome1)
@@ -201,7 +224,10 @@ impl FastGA {
     ///
     /// # Example
     /// ```no_run
+    /// # use anyhow::Result;
+    /// # fn main() -> Result<()> {
     /// use fastga_rs::{FastGA, Config, Alignment};
+    /// use std::path::Path;
     ///
     /// let aligner = FastGA::new(Config::default())?;
     /// let mut filtered_alignments = Vec::new();
@@ -219,6 +245,8 @@ impl FastGA {
     ///         }
     ///     }
     /// )?;
+    /// # Ok(())
+    /// # }
     /// ```
     pub fn align_streaming<F>(&self, genome1: &Path, genome2: &Path, mut callback: F) -> Result<()>
     where
