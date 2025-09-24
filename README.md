@@ -142,28 +142,9 @@ The library consists of several modules:
 - C compiler (for building FastGA during compilation)
 - POSIX-compliant system (Linux, macOS)
 
-## Performance
-
-FastGA-rs provides:
-- **Memory efficiency**: Stream processing for large-scale alignments
-- **Fast alignment**: Leverages FastGA's adaptive seed finding algorithm
-- **Parallel processing**: Multi-threaded alignment support
-
-## Use Cases
-
-- **Genome assembly**: Align high-quality assemblies
-- **Pangenomics**: All-vs-all alignment of multiple genomes
-- **Variant calling**: Extended CIGAR format for precise variant detection
-- **Synteny analysis**: Integration with downstream filtering tools
-
 ## License
 
 This project is licensed under the MIT License. FastGA source is included via git subtree and is subject to its own licensing terms.
-
-## Acknowledgments
-
-- [Gene Myers](https://github.com/thegenemyers) for creating FastGA
-- The pangenomics community for feedback and use cases
 
 ## Contributing
 
