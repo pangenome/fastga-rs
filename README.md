@@ -182,10 +182,11 @@ git subtree pull --prefix=deps/fastga https://github.com/thegenemyers/FASTGA.git
 If you use FastGA-rs in your research, please cite the original FastGA:
 
 ```bibtex
-@software{fastga,
-  author = {Gene Myers},
-  title = {FastGA: Fast Genome Aligner},
-  url = {https://github.com/thegenemyers/FASTGA},
-  year = {2024}
+@article{myers2025fastga,
+  author = {Gene Myers and Richard Durbin and Chenxi Zhou},
+  title = {FastGA: Fast Genome Alignment},
+  journal = {bioRxiv},
+  year = {2025},
+  doi = {10.1101/2025.06.15.659750}
 }
 ```
