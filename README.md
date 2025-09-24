@@ -179,15 +179,13 @@ git subtree pull --prefix=deps/fastga https://github.com/thegenemyers/FASTGA.git
 
 ## Citation
 
-If you use FastGA-rs in your research, please cite:
+If you use FastGA-rs in your research, please cite the original FastGA:
 
 ```bibtex
-@software{fastga-rs,
-  author = {Erik Garrison and contributors},
-  title = {FastGA-rs: Rust bindings for FastGA genome aligner},
-  url = {https://github.com/pangenome/fastga-rs},
+@software{fastga,
+  author = {Gene Myers},
+  title = {FastGA: Fast Genome Aligner},
+  url = {https://github.com/thegenemyers/FASTGA},
   year = {2024}
 }
 ```
-
-And the original FastGA paper (when published).
