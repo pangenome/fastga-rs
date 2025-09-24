@@ -361,7 +361,7 @@ fn test_error_handling_invalid_file() {
 }
 
 #[test]
-#[ignore = "FastGA binary may not be thread-safe for concurrent operations"]
+#[ignore = "FastGA GDB files don't support concurrent access from same source files"]
 fn test_concurrent_streaming() -> Result<()> {
     use std::thread;
 
