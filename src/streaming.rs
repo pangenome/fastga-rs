@@ -200,6 +200,11 @@ impl StreamingAligner {
             }
 
             if !filtered {
+                // Apply aggregators
+                for aggregator in &mut self.aggregators {
+                    aggregator(&alignment);
+                }
+
                 // Call user callback
                 let keep = callback(alignment);
                 if keep {
