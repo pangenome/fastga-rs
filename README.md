@@ -111,34 +111,165 @@ This detailed format is essential for accurate variant calling and provides more
 
 ## Advanced Usage
 
-### Streaming API (Coming Soon)
+### Streaming API
 
-The streaming API allows processing alignments as they're generated, enabling:
-- Real-time filtering
-- Reduced memory usage for large-scale alignments
-- Custom processing pipelines
+The streaming API provides fine-grained control over alignment processing, allowing you to filter and process alignments as they're generated without storing them in memory or writing intermediate files.
+
+#### Simple Streaming
 
 ```rust
-// Future API
-aligner.align_streaming(genome1, genome2, |alignment| {
-    if alignment.identity() > 0.9 {
-        // Process high-identity alignment
+use fastga_rs::streaming::align_streaming_simple;
+
+let mut high_quality = Vec::new();
+
+align_streaming_simple(genome1, genome2, |alignment| {
+    if alignment.identity() > 0.95 {
+        high_quality.push(alignment);
+        true  // Keep processing
+    } else {
+        false  // Skip this alignment
     }
-    true  // Continue processing
 })?;
 ```
 
-### Query-vs-All Mode (Coming Soon)
-
-Optimized for aligning a single query against a database:
+#### Advanced Filtering with StreamingAligner
 
 ```rust
-// Future API
-let filtered = aligner.align_query_vs_all(
-    query_seq,
-    target_file,
-    Some(|a| a.identity() > 0.85)  // Filter function
+use fastga_rs::streaming::StreamingAligner;
+use fastga_rs::Config;
+
+let mut aligner = StreamingAligner::new(Config::default());
+
+// Compose multiple filters
+aligner
+    .filter_min_identity(0.9)        // Minimum 90% identity
+    .filter_min_length(500)           // Minimum 500bp alignments
+    .filter_query(|name| name.starts_with("chr"))  // Only chromosomes
+    .filter_target(|name| !name.contains("_alt")); // Exclude alternates
+
+let stats = aligner.align_files(genome1, genome2, |alignment| {
+    // Process each alignment that passes all filters
+    println!("{} -> {}: {:.1}%",
+        alignment.query_name,
+        alignment.target_name,
+        alignment.identity() * 100.0);
+    true
+})?;
+
+println!("Processed {} alignments, kept {}",
+    stats.total_alignments,
+    stats.kept_alignments);
+```
+
+#### Query-vs-All Mode
+
+Efficiently align a single query against all targets:
+
+```rust
+let mut aligner = StreamingAligner::new(Config::default());
+
+let hits = aligner.align_query_vs_all(
+    query_sequence,
+    target_database,
+    |alignment| alignment.identity() > 0.85  // Keep high-identity hits
 )?;
+
+// Results are filtered and collected
+for hit in &hits {
+    println!("Hit: {} ({:.1}% identity)", hit.target_name, hit.identity() * 100.0);
+}
+```
+
+#### Best Hit Per Query
+
+Keep only the best alignment for each query:
+
+```rust
+use fastga_rs::streaming::BestHitFilter;
+
+let mut best_filter = BestHitFilter::new();
+
+align_streaming_simple(genome1, genome2, |alignment| {
+    best_filter.process(alignment);
+    true
+})?;
+
+let best_hits = best_filter.into_alignments();
+```
+
+#### Statistics Aggregation
+
+Collect statistics without storing alignments:
+
+```rust
+let mut aligner = StreamingAligner::new(Config::default());
+
+let mut total_bases = 0;
+let mut identity_sum = 0.0;
+
+aligner.aggregate(|alignment| {
+    total_bases += alignment.query_end - alignment.query_start;
+    identity_sum += alignment.identity();
+});
+
+let stats = aligner.align_files(genome1, genome2, |_| true)?;
+
+let avg_identity = identity_sum / stats.total_alignments as f64;
+println!("Average identity: {:.2}%", avg_identity * 100.0);
+```
+
+#### Stream to File
+
+Stream alignments directly to a PAF file:
+
+```rust
+use fastga_rs::streaming::stream_to_paf;
+use std::fs::File;
+use std::io::BufWriter;
+
+let file = File::create("alignments.paf")?;
+let writer = BufWriter::new(file);
+
+stream_to_paf(genome1, genome2, Config::default(), writer)?;
+```
+
+### Performance Benefits
+
+The streaming API provides several performance advantages:
+
+1. **Memory Efficiency**: Process TB-scale alignments without storing them
+2. **Reduced I/O**: No intermediate .1aln files
+3. **Early Termination**: Stop processing when you've found what you need
+4. **Pipeline Integration**: Direct integration with downstream tools
+5. **Parallel Processing**: Process alignments as they're generated
+
+### Use Cases
+
+#### Large-scale Genome Comparison
+```rust
+// Process human genome alignments without storing 100GB+ of alignments
+stream_to_paf(human_genome1, human_genome2, config, output_file)?;
+```
+
+#### Contamination Screening
+```rust
+// Find and remove contaminant sequences
+aligner.filter_target(|name| !known_contaminants.contains(name));
+```
+
+#### Rapid Database Search
+```rust
+// Stop after finding first high-quality hit
+let mut found = false;
+align_streaming_simple(query, database, |alignment| {
+    if alignment.identity() > 0.99 {
+        println!("Found perfect match: {}", alignment.target_name);
+        found = true;
+        false  // Stop processing
+    } else {
+        true  // Continue
+    }
+})?;
 ```
 
 ## Architecture
