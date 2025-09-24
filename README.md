@@ -7,9 +7,9 @@ A Rust library providing safe, embedded bindings for [FastGA](https://github.com
 - **Embedded binaries**: No external dependencies - FastGA is compiled and embedded directly into your Rust binary
 - **Extended CIGAR format**: Generates alignments with explicit match ('=') and mismatch ('X') operators
 - **Streaming API**: Process alignments as they're generated without storing everything in memory
-- **Plane sweep filtering**: Immediate per-query filtering for handling repetitive genomes efficiently
 - **Identity scoring**: Calculates alignment identity for downstream filtering algorithms
 - **Thread-safe**: Supports parallel alignment operations
+- **Memory efficient**: Suitable for large genome alignments
 
 ## Installation
 
@@ -54,32 +54,35 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ## Advanced Usage
 
-### Streaming with Immediate Filtering
+### Streaming API
 
-For repetitive genomes, apply plane sweep filtering immediately to control memory usage:
+Process alignments as they're generated without loading everything into memory:
 
 ```rust
-use fastga_rs::streaming::align_query_wise_with_sweep;
-use fastga_rs::plane_sweep::PlaneSweepConfig;
+use fastga_rs::streaming::StreamingAligner;
 use fastga_rs::Config;
 
-let sweep_config = PlaneSweepConfig {
-    max_per_query: 100,      // Keep top 100 alignments per query
-    max_per_target: 1,       // 1:1 mapping per target
-    min_identity: 0.90,      // 90% identity threshold
-    min_length: 1000,        // Minimum 1kb alignments
-    max_overlap: 0.5,        // Filter >50% overlapping alignments
-};
+let mut aligner = StreamingAligner::new(Config::default());
 
-let (alignments, stats) = align_query_wise_with_sweep(
-    "queries.fa",
-    "targets.fa",
-    Config::default(),
-    sweep_config,
+// Add filters
+aligner
+    .filter_min_identity(0.9)
+    .filter_min_length(1000);
+
+// Process alignments with a callback
+let stats = aligner.align_files(
+    "genome1.fa",
+    "genome2.fa",
+    |alignment| {
+        // Process each alignment as it's generated
+        println!("Found: {} -> {}",
+                 alignment.query_name,
+                 alignment.target_name);
+        true  // Keep alignment
+    }
 )?;
 
-println!("Kept {} alignments after filtering", alignments.len());
-println!("Distribution:\n{}", stats);
+println!("Processed {} alignments", stats.total_alignments);
 ```
 
 ### Configuration Presets
@@ -129,10 +132,9 @@ The library consists of several modules:
 
 - **`embedded`**: Manages embedded FastGA binaries
 - **`streaming`**: Streaming alignment processing
-- **`plane_sweep`**: Filtering algorithms for repetitive sequences
-- **`integrated`**: API for embedding in other applications
 - **`config`**: Configuration options
 - **`alignment`**: Alignment data structures and PAF output
+- **`error`**: Error handling types
 
 ## Requirements
 
@@ -143,10 +145,9 @@ The library consists of several modules:
 ## Performance
 
 FastGA-rs provides:
-- **Memory efficiency**: Stream processing prevents memory explosion with repetitive genomes
+- **Memory efficiency**: Stream processing for large-scale alignments
 - **Fast alignment**: Leverages FastGA's adaptive seed finding algorithm
 - **Parallel processing**: Multi-threaded alignment support
-- **Immediate filtering**: Plane sweep filtering during alignment generation
 
 ## Use Cases
 
