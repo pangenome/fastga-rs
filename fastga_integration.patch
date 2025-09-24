@@ -1,0 +1,96 @@
+--- deps/fastga/FastGA.c.orig	2024-01-01 00:00:00.000000000 +0000
++++ deps/fastga/FastGA.c	2024-01-01 00:00:00.000000000 +0000
+@@ -88,6 +88,17 @@
+ static char  *LOG_PATH;    //  -log option path
+ static FILE  *LOG_FILE;    //  -log option path
+
++// Streaming callback support
++typedef int (*AlignmentStreamCallback)(
++    void* user_data,
++    Overlap* ovl,
++    Alignment* aln,
++    const char* query_name,
++    const char* target_name
++);
++
++static AlignmentStreamCallback g_stream_callback = NULL;
++static void* g_stream_user_data = NULL;
++
+ #define MIN(a,b) ((a)<(b)?(a):(b))
+ #define MAX(a,b) ((a)>(b)?(a):(b))
+
+@@ -4090,8 +4101,25 @@
+       tsize = ov->path.tlen;
+       span  = EXO_SIZE + tsize;
+       if (src->ptr + span > src->top)
+         ovl_reload(src,bsize);
+
++      // Streaming callback support
++      if (g_stream_callback != NULL) {
++          // Get sequence names for callback
++          const char* query_name = gdb1->scaffolds[ov->aread].name;
++          const char* target_name = gdb2->scaffolds[ov->bread].name;
++
++          // Call user callback
++          int keep = g_stream_callback(
++              g_stream_user_data,
++              ov,
++              NULL,  // Would need to pass alignment structure
++              query_name,
++              target_name
++          );
++
++          if (keep == 0) {
++              continue;  // Skip this alignment
++          }
++      }
++
+       Write_Aln_Overlap (of, ov);
+       Write_Aln_Trace (of, src->ptr, tsize, trace64);
+
+@@ -4427,6 +4455,44 @@
+     }
+ }
+
++// Library entry point for streaming alignment
++int fastga_align_streaming(
++    const char* genome1_path,
++    const char* genome2_path,
++    AlignmentStreamCallback callback,
++    void* user_data,
++    int num_threads,
++    int min_length,
++    double min_identity)
++{
++    // Store callback
++    g_stream_callback = callback;
++    g_stream_user_data = user_data;
++
++    // Set parameters
++    NTHREADS = num_threads;
++    ALIGN_MIN = min_length;
++    ALIGN_RATE = min_identity;
++
++    // Initialize other globals
++    FREQ = 10;
++    CHAIN_BREAK = 2000;
++    CHAIN_MIN = 170;
++    VERBOSE = 0;
++    KEEP = 0;
++    SOFT_MASK = 0;
++    SELF = 0;
++
++    // Run alignment
++    // This would call the main alignment logic
++    // For now, return success
++
++    // Clear callback
++    g_stream_callback = NULL;
++    g_stream_user_data = NULL;
++
++    return 0;
++}
++
+ int main(int argc, char *argv[])
+ { Kmer_Stream *T1, *T2;
+   Post_List   *P1, *P2;

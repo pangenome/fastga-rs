@@ -141,11 +141,11 @@ int fastga_process_alignment(GDB* gdb1, GDB* gdb2, Overlap* ovl, Alignment* aln)
     g_stream_context->alignment_count++;
 
     // Extract alignment information
-    char* query_name = gdb1->scafolds[ovl->aread].name;
-    char* target_name = gdb2->scafolds[ovl->bread].name;
+    char* query_name = gdb1->scaffolds[ovl->aread].name;
+    char* target_name = gdb2->scaffolds[ovl->bread].name;
 
-    int query_len = gdb1->scafolds[ovl->aread].clen;
-    int target_len = gdb2->scafolds[ovl->bread].clen;
+    int query_len = gdb1->scaffolds[ovl->aread].clen;
+    int target_len = gdb2->scaffolds[ovl->bread].clen;
 
     Path* path = &ovl->path;
     int query_start = path->abpos;

@@ -11,8 +11,8 @@ fn main() -> Result<()> {
 
     // Example 1: Align two genome files
     println!("\n=== Example 1: Basic file alignment ===");
-    let genome1 = Path::new("test_data/genome1.fasta");
-    let genome2 = Path::new("test_data/genome2.fasta");
+    let genome1 = Path::new("data/genome1.fasta");
+    let genome2 = Path::new("data/genome2.fasta");
 
     // Note: In a real scenario, these files would exist
     // let alignments = aligner.align_files(genome1, genome2)?;

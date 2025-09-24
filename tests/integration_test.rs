@@ -8,19 +8,19 @@ use anyhow::Result;
 #[test]
 fn test_yeast_self_alignment() -> Result<()> {
     // Use the sample yeast data
-    let yeast_file = Path::new("test_data/yeast_sample.fasta");
+    let yeast_file = Path::new("data/yeast_sample.fasta");
 
     // Create test data if it doesn't exist
     if !yeast_file.exists() {
         eprintln!("Test data not found. Creating sample data...");
-        fs::create_dir_all("test_data")?;
+        fs::create_dir_all("data")?;
 
         // Extract sample from compressed yeast genome
         let yeast_gz = Path::new("data/scerevisiae8.fa.gz");
         if yeast_gz.exists() {
             std::process::Command::new("sh")
                 .arg("-c")
-                .arg("zcat data/scerevisiae8.fa.gz | head -1000 > test_data/yeast_sample.fasta")
+                .arg("zcat data/scerevisiae8.fa.gz | head -1000 > data/yeast_sample.fasta")
                 .output()?;
         } else {
             // Create minimal test data

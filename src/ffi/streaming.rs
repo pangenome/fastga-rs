@@ -46,18 +46,18 @@ pub type AlignmentCallbackC = unsafe extern "C" fn(
     gaps: c_int,
 ) -> c_int;
 
-// External C functions
-extern "C" {
-    fn fastga_align_streaming(
-        genome1_path: *const c_char,
-        genome2_path: *const c_char,
-        callback: AlignmentCallbackC,
-        user_data: *mut c_void,
-        num_threads: c_int,
-        min_length: c_int,
-        min_identity: c_double,
-    ) -> c_int;
-}
+// External C functions - disabled for now, using subprocess approach
+// extern "C" {
+//     fn fastga_align_streaming(
+//         genome1_path: *const c_char,
+//         genome2_path: *const c_char,
+//         callback: AlignmentCallbackC,
+//         user_data: *mut c_void,
+//         num_threads: c_int,
+//         min_length: c_int,
+//         min_identity: c_double,
+//     ) -> c_int;
+// }
 
 /// Context for streaming callbacks
 pub struct StreamingContext<F>
@@ -167,7 +167,7 @@ where
     }
 }
 
-/// Safe wrapper for streaming alignment
+/// Safe wrapper for streaming alignment - using subprocess for now
 pub fn align_streaming<F>(
     genome1: &str,
     genome2: &str,
@@ -179,37 +179,76 @@ pub fn align_streaming<F>(
 where
     F: FnMut(Alignment) -> bool,
 {
-    let genome1_c = CString::new(genome1)
-        .map_err(|e| FastGAError::Other(format!("Invalid genome1 path: {}", e)))?;
-    let genome2_c = CString::new(genome2)
-        .map_err(|e| FastGAError::Other(format!("Invalid genome2 path: {}", e)))?;
+    // For now, use the subprocess approach with streaming PAF parsing
+    // In production, this would hook directly into FastGA's C code
 
-    let mut ctx = StreamingContext {
-        callback,
-        alignments_processed: 0,
-        alignments_kept: 0,
-        error: None,
-    };
+    use std::process::{Command, Stdio};
+    use std::io::{BufRead, BufReader};
 
-    unsafe {
-        let result = fastga_align_streaming(
-            genome1_c.as_ptr(),
-            genome2_c.as_ptr(),
-            alignment_callback_wrapper::<F>,
-            &mut ctx as *mut _ as *mut c_void,
-            num_threads as c_int,
-            min_length as c_int,
-            min_identity as c_double,
-        );
+    let fastga_bin = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("deps")
+        .join("fastga")
+        .join("FastGA");
 
-        if result < 0 {
-            if let Some(error) = ctx.error {
-                return Err(FastGAError::FfiError(error));
-            } else {
-                return Err(FastGAError::FfiError("FastGA streaming failed".to_string()));
+    if !fastga_bin.exists() {
+        return Err(FastGAError::Other(format!(
+            "FastGA binary not found at {:?}",
+            fastga_bin
+        )));
+    }
+
+    let mut cmd = Command::new(fastga_bin);
+    cmd.arg("-pafx")  // PAF with extended CIGAR
+        .arg(format!("-T{}", num_threads))
+        .arg(format!("-l{}", min_length));
+
+    if min_identity > 0.0 {
+        cmd.arg(format!("-i{:.2}", min_identity));
+    }
+
+    cmd.arg(genome1)
+        .arg(genome2)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null());
+
+    let mut child = cmd.spawn()
+        .map_err(|e| FastGAError::Other(format!("Failed to spawn FastGA: {}", e)))?;
+
+    let stdout = child.stdout.take()
+        .ok_or_else(|| FastGAError::Other("Failed to capture stdout".to_string()))?;
+
+    let reader = BufReader::new(stdout);
+    let mut processed = 0;
+    let mut kept = 0;
+
+    for line in reader.lines() {
+        let line = line.map_err(|e| FastGAError::IoError(e))?;
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+
+        processed += 1;
+
+        match Alignment::from_paf_line(&line) {
+            Ok(alignment) => {
+                if callback(alignment) {
+                    kept += 1;
+                }
+            }
+            Err(e) => {
+                eprintln!("Warning: Failed to parse PAF line: {}", e);
             }
         }
     }
 
-    Ok((ctx.alignments_processed, ctx.alignments_kept))
+    let status = child.wait()
+        .map_err(|e| FastGAError::Other(format!("Failed to wait for FastGA: {}", e)))?;
+
+    if !status.success() {
+        return Err(FastGAError::FastGAExecutionFailed(
+            format!("FastGA exited with status: {}", status)
+        ));
+    }
+
+    Ok((processed, kept))
 }

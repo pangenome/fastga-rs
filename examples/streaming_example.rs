@@ -13,12 +13,12 @@ fn main() -> Result<()> {
     println!("FastGA Streaming API Examples\n");
 
     // Get test data paths
-    let genome1 = Path::new("test_data/yeast_sample.fasta");
-    let genome2 = Path::new("test_data/yeast_sample.fasta");
+    let genome1 = Path::new("data/yeast_sample.fasta");
+    let genome2 = Path::new("data/yeast_sample.fasta");
 
     if !genome1.exists() || !genome2.exists() {
-        eprintln!("Test data not found. Please ensure test_data/yeast_sample.fasta exists.");
-        eprintln!("You can create it with: zcat data/scerevisiae8.fa.gz | head -1000 > test_data/yeast_sample.fasta");
+        eprintln!("Test data not found. Please ensure data/yeast_sample.fasta exists.");
+        eprintln!("You can create it with: zcat data/scerevisiae8.fa.gz | head -1000 > data/yeast_sample.fasta");
         return Ok(());
     }
 
@@ -156,25 +156,34 @@ fn example_best_hits(genome1: &Path, genome2: &Path) -> Result<()> {
 fn example_statistics(genome1: &Path, genome2: &Path) -> Result<()> {
     println!("=== Example 4: Statistics Aggregation ===\n");
 
-    let mut identity_histogram = vec![0; 11];  // 0-10%, 10-20%, ..., 90-100%
-    let mut length_distribution = HashMap::new();
-    let mut query_counts = HashMap::new();
+    use std::sync::{Arc, Mutex};
+
+    let identity_histogram = Arc::new(Mutex::new(vec![0; 11]));  // 0-10%, 10-20%, ..., 90-100%
+    let length_distribution = Arc::new(Mutex::new(HashMap::new()));
+    let query_counts = Arc::new(Mutex::new(HashMap::new()));
 
     let mut aligner = StreamingAligner::new(Config::default());
 
-    aligner.aggregate(|alignment: &Alignment| {
+    let hist_clone = Arc::clone(&identity_histogram);
+    let len_clone = Arc::clone(&length_distribution);
+    let query_clone = Arc::clone(&query_counts);
+
+    aligner.aggregate(move |alignment: &Alignment| {
         // Update identity histogram
         let bucket = (alignment.identity() * 10.0) as usize;
-        if bucket < identity_histogram.len() {
-            identity_histogram[bucket] += 1;
+        let mut hist = hist_clone.lock().unwrap();
+        if bucket < hist.len() {
+            hist[bucket] += 1;
         }
 
         // Track alignment lengths
         let length_bucket = ((alignment.query_end - alignment.query_start) / 100) * 100;
-        *length_distribution.entry(length_bucket).or_insert(0) += 1;
+        let mut len_dist = len_clone.lock().unwrap();
+        *len_dist.entry(length_bucket).or_insert(0) += 1;
 
         // Count alignments per query
-        *query_counts.entry(alignment.query_name.clone()).or_insert(0) += 1;
+        let mut counts = query_clone.lock().unwrap();
+        *counts.entry(alignment.query_name.clone()).or_insert(0) += 1;
     });
 
     let stats = aligner.align_files(
@@ -187,7 +196,8 @@ fn example_statistics(genome1: &Path, genome2: &Path) -> Result<()> {
 
     // Display identity distribution
     println!("Identity distribution:");
-    for (i, count) in identity_histogram.iter().enumerate() {
+    let hist = identity_histogram.lock().unwrap();
+    for (i, count) in hist.iter().enumerate() {
         if *count > 0 {
             let start = i * 10;
             let end = (i + 1) * 10;
@@ -197,15 +207,17 @@ fn example_statistics(genome1: &Path, genome2: &Path) -> Result<()> {
 
     // Display length distribution
     println!("\nLength distribution:");
-    let mut lengths: Vec<_> = length_distribution.iter().collect();
+    let len_dist = length_distribution.lock().unwrap();
+    let mut lengths: Vec<_> = len_dist.iter().collect();
     lengths.sort_by_key(|&(k, _)| k);
     for (bucket, count) in lengths.iter().take(5) {
-        println!("  {}-{} bp: {} alignments", bucket, bucket + 100, count);
+        println!("  {}-{} bp: {} alignments", bucket, *bucket + 100, count);
     }
 
     // Display query statistics
     println!("\nQueries with most alignments:");
-    let mut query_vec: Vec<_> = query_counts.iter().collect();
+    let counts = query_counts.lock().unwrap();
+    let mut query_vec: Vec<_> = counts.iter().collect();
     query_vec.sort_by_key(|&(_, count)| std::cmp::Reverse(*count));
     for (query, count) in query_vec.iter().take(3) {
         println!("  {}: {} alignments", query, count);

@@ -60,6 +60,7 @@ pub mod alignment;
 pub mod config;
 pub mod error;
 pub mod streaming;
+pub mod embedded;
 mod ffi;
 
 use std::path::Path;
@@ -170,21 +171,40 @@ impl FastGA {
 
     /// Executes FastGA binary with appropriate parameters.
     fn run_fastga(&self, genome1: &Path, genome2: &Path, _temp_dir: &TempDir) -> Result<String> {
-        // Use the FastGA binary from our deps directory
-        let fastga_bin = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("deps")
-            .join("fastga")
-            .join("FastGA");
+        // Use the embedded FastGA binary - no external dependencies!
+        let fastga = embedded::get_embedded_fastga()?;
 
-        if !fastga_bin.exists() {
-            return Err(FastGAError::Other(format!(
-                "FastGA binary not found at {:?}. Run 'make' in deps/fastga directory",
-                fastga_bin
-            )));
+        // Build arguments for FastGA - need to own strings for lifetime
+        let mut owned_args = Vec::new();
+        owned_args.push("-pafx".to_string());  // PAF output with extended CIGAR
+        owned_args.push(format!("-T{}", self.config.num_threads));
+        owned_args.push(format!("-l{}", self.config.min_alignment_length));
+
+        if let Some(min_id) = self.config.min_identity {
+            owned_args.push(format!("-i{:.2}", min_id));
         }
 
-        // Build FastGA command with -pafx flags for PAF output with extended CIGAR
-        let mut cmd = Command::new(&fastga_bin);
+        let genome1_str = genome1.to_str()
+            .ok_or_else(|| FastGAError::Other("Invalid genome1 path".to_string()))?;
+        let genome2_str = genome2.to_str()
+            .ok_or_else(|| FastGAError::Other("Invalid genome2 path".to_string()))?;
+
+        owned_args.push(genome1_str.to_string());
+        owned_args.push(genome2_str.to_string());
+
+        // Convert to &str slice for run_fastga
+        let args: Vec<&str> = owned_args.iter().map(|s| s.as_str()).collect();
+
+        // Run embedded FastGA
+        fastga.run_fastga(&args)
+    }
+}
+
+// Remove the old implementation that used Command directly
+impl FastGA {
+    fn run_fastga_old(&self, genome1: &Path, genome2: &Path, _temp_dir: &TempDir) -> Result<String> {
+        // Old implementation - kept for reference
+        let mut cmd = Command::new("unused");
 
         // FastGA expects arguments in the form -T<value> (no space)
         cmd.arg("-pafx")  // PAF output with extended CIGAR
@@ -278,7 +298,7 @@ impl FastGA {
     /// Only the alignments that pass the filter
     pub fn align_query_vs_all<F>(&self, query: &[u8], target_file: &Path, filter: Option<F>) -> Result<Vec<Alignment>>
     where
-        F: Fn(&Alignment) -> bool,
+        F: Fn(&Alignment) -> bool + 'static,
     {
         let mut aligner = streaming::StreamingAligner::new(self.config.clone());
 
