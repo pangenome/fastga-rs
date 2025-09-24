@@ -158,7 +158,7 @@ FastGA-rs provides:
 
 ## License
 
-This project is licensed under the MIT License. FastGA is included as a submodule and is subject to its own licensing terms.
+This project is licensed under the MIT License. FastGA source is included via git subtree and is subject to its own licensing terms.
 
 ## Acknowledgments
 
@@ -168,6 +168,14 @@ This project is licensed under the MIT License. FastGA is included as a submodul
 ## Contributing
 
 Contributions are welcome! Please feel free to submit issues and pull requests.
+
+### Updating FastGA
+
+FastGA is included as a git subtree (not submodule) for crate compatibility. To update to the latest FastGA version:
+
+```bash
+git subtree pull --prefix=deps/fastga https://github.com/thegenemyers/FASTGA.git main --squash
+```
 
 ## Citation
 
