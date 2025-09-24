@@ -7,26 +7,33 @@ use anyhow::Result;
 use tempfile::TempDir;
 
 #[test]
-fn test_chr1_self_alignment() -> Result<()> {
-    // Use chromosome I test data
-    let chr1_ref = Path::new("data/chr1_ref.fasta");
+fn test_chrV_self_alignment() -> Result<()> {
+    // Use chromosome V test data with all strains
+    let chrV_file = Path::new("data/cerevisiae.chrV.fa.gz");
 
-    if !chr1_ref.exists() {
+    if !chrV_file.exists() {
         eprintln!("Test data not found. Skipping test.");
         return Ok(());
     }
 
-    // Copy to temp directory to avoid GDB conflicts
+    // Decompress to temp directory to avoid GDB conflicts
     let temp_dir = tempfile::TempDir::new()?;
-    let temp_chr1 = temp_dir.path().join("chr1.fasta");
-    fs::copy(chr1_ref, &temp_chr1)?;
+    let temp_chrV = temp_dir.path().join("chrV.fasta");
+
+    // Decompress the file
+    use std::process::Command;
+    Command::new("gunzip")
+        .arg("-c")
+        .arg(chrV_file)
+        .output()
+        .and_then(|output| fs::write(&temp_chrV, output.stdout))?
 
     // Create aligner with default configuration
     let aligner = FastGA::new(Config::default())?;
 
     // Align chromosome against itself
-    println!("Running FastGA alignment on chromosome I...");
-    let alignments = aligner.align_files(&temp_chr1, &temp_chr1)?;
+    println!("Running FastGA alignment on chromosome V...");
+    let alignments = aligner.align_files(&temp_chrV, &temp_chrV)?;
 
     // Basic validation
     assert!(!alignments.is_empty(), "Should find at least one alignment");
@@ -63,25 +70,29 @@ fn test_chr1_self_alignment() -> Result<()> {
 }
 
 #[test]
-fn test_chr1_cross_strain_alignment() -> Result<()> {
-    // Test alignment between two different yeast strains
-    let chr1_ref = Path::new("data/chr1_ref.fasta");
-    let chr1_s288c = Path::new("data/chr1_s288c.fasta");
+fn test_chrV_cross_strain_alignment() -> Result<()> {
+    // Test alignment using full chrV file with multiple strains
+    let chrV_file = Path::new("data/cerevisiae.chrV.fa.gz");
 
-    if !chr1_ref.exists() || !chr1_s288c.exists() {
+    if !chrV_file.exists() {
         eprintln!("Test data not found. Skipping test.");
         return Ok(());
     }
 
-    // Copy to temp directory
+    // Decompress to temp directory
     let temp_dir = TempDir::new()?;
-    let temp_ref = temp_dir.path().join("chr1_ref.fasta");
-    let temp_s288c = temp_dir.path().join("chr1_s288c.fasta");
-    fs::copy(chr1_ref, &temp_ref)?;
-    fs::copy(chr1_s288c, &temp_s288c)?;
+    let temp_chrV = temp_dir.path().join("chrV.fasta");
+
+    use std::process::Command;
+    Command::new("gunzip")
+        .arg("-c")
+        .arg(chrV_file)
+        .output()
+        .and_then(|output| fs::write(&temp_chrV, output.stdout))?;
 
     let aligner = FastGA::new(Config::default())?;
-    let alignments = aligner.align_files(&temp_ref, &temp_s288c)?;
+    // Self-alignment will find all strain-vs-strain alignments
+    let alignments = aligner.align_files(&temp_chrV, &temp_chrV)?;
 
     assert!(!alignments.is_empty(), "Should find alignments between strains");
 

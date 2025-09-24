@@ -6,25 +6,31 @@ use std::path::Path;
 use anyhow::Result;
 
 #[test]
-fn test_chr1_identity_scoring() -> Result<()> {
-    // Use the real chromosome I data
-    let chr1_file = Path::new("data/chr1_ref.fasta");
+fn test_chrV_identity_scoring() -> Result<()> {
+    // Use the real chromosome V data
+    let chrV_file = Path::new("data/cerevisiae.chrV.fa.gz");
 
-    if !chr1_file.exists() {
+    if !chrV_file.exists() {
         eprintln!("Skipping real-world test - test data not available");
         return Ok(());
     }
 
-    // Copy to temp dir to avoid GDB conflicts
+    // Decompress to temp dir to avoid GDB conflicts
     let temp_dir = tempfile::TempDir::new()?;
-    let temp_chr1 = temp_dir.path().join("chr1.fasta");
-    std::fs::copy(chr1_file, &temp_chr1)?;
+    let temp_chrV = temp_dir.path().join("chrV.fasta");
+
+    use std::process::Command;
+    Command::new("gunzip")
+        .arg("-c")
+        .arg(chrV_file)
+        .output()
+        .and_then(|output| std::fs::write(&temp_chrV, output.stdout))?;
 
     // Run self-alignment with default config
     let aligner = FastGA::new(Config::default())?;
-    let alignments = aligner.align_files(&temp_chr1, &temp_chr1)?;
+    let alignments = aligner.align_files(&temp_chrV, &temp_chrV)?;
 
-    println!("\n=== Chromosome I Alignment Analysis ===");
+    println!("\n=== Chromosome V Alignment Analysis ===");
     println!("Total alignments found: {}", alignments.len());
 
     // Collect alignment statistics

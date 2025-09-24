@@ -11,17 +11,23 @@ use anyhow::Result;
 fn create_test_sequences() -> Result<(tempfile::TempDir, std::path::PathBuf, std::path::PathBuf)> {
     let temp_dir = tempfile::TempDir::new()?;
 
-    // Use chromosome I test data
-    let chr1_ref = Path::new("data/chr1_ref.fasta");
-    let chr1_s288c = Path::new("data/chr1_s288c.fasta");
+    // Use chromosome V test data
+    let chrV_file = Path::new("data/cerevisiae.chrV.fa.gz");
 
-    if chr1_ref.exists() && chr1_s288c.exists() {
-        // Copy to temp directory to avoid GDB conflicts
+    if chrV_file.exists() {
+        // Decompress to temp directory to avoid GDB conflicts
         let seq1_path = temp_dir.path().join("seq1.fasta");
         let seq2_path = temp_dir.path().join("seq2.fasta");
 
-        fs::copy(chr1_ref, &seq1_path)?;
-        fs::copy(chr1_s288c, &seq2_path)?;
+        // Decompress the file
+        use std::process::Command;
+        let output = Command::new("gunzip")
+            .arg("-c")
+            .arg(chrV_file)
+            .output()?;
+
+        fs::write(&seq1_path, &output.stdout)?;
+        fs::write(&seq2_path, &output.stdout)?;
 
         return Ok((temp_dir, seq1_path, seq2_path));
     }
