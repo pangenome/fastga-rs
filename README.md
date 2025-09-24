@@ -13,7 +13,14 @@ A Rust library providing safe, embedded bindings for [FastGA](https://github.com
 
 ## Installation
 
-Add to your `Cargo.toml`:
+Clone with shallow submodule (saves ~140MB):
+
+```bash
+git clone --recurse-submodules --shallow-submodules https://github.com/pangenome/fastga-rs.git
+cd fastga-rs
+```
+
+Or add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
