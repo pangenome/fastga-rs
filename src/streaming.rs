@@ -8,7 +8,6 @@ use std::path::Path;
 use std::sync::{Arc, Mutex};
 use std::collections::HashMap;
 use crate::{Config, Alignment, FastGAError, Result};
-use crate::plane_sweep::{PlaneSweepConfig, PlaneSweepFilter, QueryWiseSweep};
 
 /// Builder for configuring streaming alignment operations.
 ///
@@ -331,130 +330,6 @@ pub fn stream_to_paf<W: std::io::Write>(
     )
 }
 
-/// Query-wise alignment with immediate plane sweep filtering.
-///
-/// This function processes queries one-by-one against all targets, applying
-/// plane sweep filtering immediately to handle repetitive genomes efficiently.
-/// This ensures fair mapping distribution where all queries get equal opportunity
-/// to map against all targets, while minimizing memory and disk usage.
-///
-/// # Example
-/// ```no_run
-/// # use anyhow::Result;
-/// # fn main() -> Result<()> {
-/// use fastga_rs::streaming::align_query_wise_with_sweep;
-/// use fastga_rs::plane_sweep::PlaneSweepConfig;
-/// use fastga_rs::Config;
-///
-/// let plane_config = PlaneSweepConfig {
-///     max_per_query: 100,     // Keep top 100 alignments per query
-///     max_per_target: 1,      // 1:1 mapping per target
-///     min_identity: 0.90,     // 90% identity threshold
-///     min_length: 1000,       // Minimum 1kb alignments
-///     max_overlap: 0.5,       // Filter >50% overlapping alignments
-/// };
-///
-/// let (alignments, stats) = align_query_wise_with_sweep(
-///     "queries.fa",
-///     "targets.fa",
-///     Config::default(),
-///     plane_config,
-/// )?;
-///
-/// println!("Kept {} alignments after plane sweep filtering", alignments.len());
-/// println!("Distribution:\n{}", stats);
-/// # Ok(())
-/// # }
-/// ```
-pub fn align_query_wise_with_sweep(
-    queries: impl AsRef<Path>,
-    targets: impl AsRef<Path>,
-    align_config: Config,
-    sweep_config: PlaneSweepConfig,
-) -> Result<(Vec<Alignment>, String)> {
-    use std::fs::File;
-    use std::io::{BufRead, BufReader};
-
-    let queries_path = queries.as_ref();
-    let targets_path = targets.as_ref();
-
-    // Read query sequences
-    let query_file = File::open(queries_path)?;
-    let reader = BufReader::new(query_file);
-    let mut current_query_name = String::new();
-    let mut current_query_seq = String::new();
-    let mut all_results = Vec::new();
-    let mut sweep = QueryWiseSweep::new(sweep_config);
-
-    // Process each query sequence independently
-    for line in reader.lines() {
-        let line = line?;
-        if line.starts_with('>') {
-            // Process previous query if exists
-            if !current_query_name.is_empty() {
-                let results = process_single_query(
-                    &current_query_name,
-                    &current_query_seq,
-                    targets_path,
-                    &align_config,
-                    &mut sweep,
-                )?;
-                all_results.extend(results);
-            }
-
-            // Start new query
-            current_query_name = line[1..].split_whitespace().next()
-                .unwrap_or("")
-                .to_string();
-            current_query_seq.clear();
-        } else {
-            current_query_seq.push_str(&line);
-        }
-    }
-
-    // Process last query
-    if !current_query_name.is_empty() {
-        let results = process_single_query(
-            &current_query_name,
-            &current_query_seq,
-            targets_path,
-            &align_config,
-            &mut sweep,
-        )?;
-        all_results.extend(results);
-    }
-
-    let stats = sweep.get_distribution_stats();
-    Ok((all_results, stats))
-}
-
-/// Process a single query against all targets with plane sweep filtering
-fn process_single_query(
-    query_name: &str,
-    query_seq: &str,
-    targets_path: &Path,
-    align_config: &Config,
-    sweep: &mut QueryWiseSweep,
-) -> Result<Vec<Alignment>> {
-    eprintln!("Processing query: {} ({} bp)", query_name, query_seq.len());
-
-    // Create temporary file for single query
-    let temp_dir = tempfile::TempDir::new()?;
-    let query_file = temp_dir.path().join("query.fasta");
-    let query_content = format!(">{}\n{}\n", query_name, query_seq);
-    std::fs::write(&query_file, query_content)?;
-
-    // Align this query against all targets
-    let aligner = crate::FastGA::new(align_config.clone())?;
-    let alignments = aligner.align_files(&query_file, targets_path)?;
-
-    // Apply plane sweep filtering immediately
-    let filtered = sweep.process_query(query_name, alignments.alignments.into_iter());
-
-    eprintln!("  → Kept {} alignments after plane sweep", filtered.len());
-
-    Ok(filtered)
-}
 
 /// Filter alignments by best hit per query.
 ///

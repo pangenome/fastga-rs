@@ -61,8 +61,6 @@ pub mod config;
 pub mod error;
 pub mod streaming;
 pub mod embedded;
-pub mod plane_sweep;
-pub mod integrated;
 mod ffi;
 
 use std::path::Path;

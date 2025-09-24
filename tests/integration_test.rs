@@ -7,41 +7,26 @@ use anyhow::Result;
 use tempfile::TempDir;
 
 #[test]
-fn test_yeast_self_alignment() -> Result<()> {
-    // Use the sample yeast data
-    let yeast_file = Path::new("data/yeast_sample.fasta");
+fn test_chr1_self_alignment() -> Result<()> {
+    // Use chromosome I test data
+    let chr1_ref = Path::new("data/chr1_ref.fasta");
 
-    // Create test data if it doesn't exist
-    if !yeast_file.exists() {
-        eprintln!("Test data not found. Creating sample data...");
-        fs::create_dir_all("data")?;
-
-        // Extract sample from compressed yeast genome
-        let yeast_gz = Path::new("data/scerevisiae8.fa.gz");
-        if yeast_gz.exists() {
-            std::process::Command::new("sh")
-                .arg("-c")
-                .arg("zcat data/scerevisiae8.fa.gz | head -1000 > data/yeast_sample.fasta")
-                .output()?;
-        } else {
-            // Create minimal test data
-            fs::write(yeast_file,
-                ">test_seq1\nACGTACGTACGTACGTACGTACGTACGTACGT\n\
-                 >test_seq2\nACGTACGTACGTACGTTCGTACGTACGTACGT\n")?;
-        }
+    if !chr1_ref.exists() {
+        eprintln!("Test data not found. Skipping test.");
+        return Ok(());
     }
 
     // Copy to temp directory to avoid GDB conflicts
     let temp_dir = tempfile::TempDir::new()?;
-    let temp_yeast = temp_dir.path().join("yeast.fasta");
-    fs::copy(yeast_file, &temp_yeast)?;
+    let temp_chr1 = temp_dir.path().join("chr1.fasta");
+    fs::copy(chr1_ref, &temp_chr1)?;
 
     // Create aligner with default configuration
     let aligner = FastGA::new(Config::default())?;
 
-    // Align yeast against itself
-    println!("Running FastGA alignment on yeast sample...");
-    let alignments = aligner.align_files(&temp_yeast, &temp_yeast)?;
+    // Align chromosome against itself
+    println!("Running FastGA alignment on chromosome I...");
+    let alignments = aligner.align_files(&temp_chr1, &temp_chr1)?;
 
     // Basic validation
     assert!(!alignments.is_empty(), "Should find at least one alignment");
@@ -73,6 +58,40 @@ fn test_yeast_self_alignment() -> Result<()> {
 
     println!("\nPAF output (first line):");
     println!("{}", first_line);
+
+    Ok(())
+}
+
+#[test]
+fn test_chr1_cross_strain_alignment() -> Result<()> {
+    // Test alignment between two different yeast strains
+    let chr1_ref = Path::new("data/chr1_ref.fasta");
+    let chr1_s288c = Path::new("data/chr1_s288c.fasta");
+
+    if !chr1_ref.exists() || !chr1_s288c.exists() {
+        eprintln!("Test data not found. Skipping test.");
+        return Ok(());
+    }
+
+    // Copy to temp directory
+    let temp_dir = TempDir::new()?;
+    let temp_ref = temp_dir.path().join("chr1_ref.fasta");
+    let temp_s288c = temp_dir.path().join("chr1_s288c.fasta");
+    fs::copy(chr1_ref, &temp_ref)?;
+    fs::copy(chr1_s288c, &temp_s288c)?;
+
+    let aligner = FastGA::new(Config::default())?;
+    let alignments = aligner.align_files(&temp_ref, &temp_s288c)?;
+
+    assert!(!alignments.is_empty(), "Should find alignments between strains");
+
+    // Check identity - should be high but not perfect between strains
+    if let Some(first) = alignments.alignments.first() {
+        let identity = first.identity();
+        println!("Cross-strain identity: {:.2}%", identity * 100.0);
+        assert!(identity > 0.9, "Strains should be similar");
+        assert!(identity < 1.0, "Strains should have some differences");
+    }
 
     Ok(())
 }

@@ -6,25 +6,25 @@ use std::path::Path;
 use anyhow::Result;
 
 #[test]
-fn test_yeast_genome_identity_scoring() -> Result<()> {
-    // Use the real yeast sample data
-    let yeast_file = Path::new("data/yeast_sample.fasta");
+fn test_chr1_identity_scoring() -> Result<()> {
+    // Use the real chromosome I data
+    let chr1_file = Path::new("data/chr1_ref.fasta");
 
-    if !yeast_file.exists() {
-        eprintln!("Skipping real-world test - yeast data not available");
+    if !chr1_file.exists() {
+        eprintln!("Skipping real-world test - test data not available");
         return Ok(());
     }
 
     // Copy to temp dir to avoid GDB conflicts
     let temp_dir = tempfile::TempDir::new()?;
-    let temp_yeast = temp_dir.path().join("yeast.fasta");
-    std::fs::copy(yeast_file, &temp_yeast)?;
+    let temp_chr1 = temp_dir.path().join("chr1.fasta");
+    std::fs::copy(chr1_file, &temp_chr1)?;
 
     // Run self-alignment with default config
     let aligner = FastGA::new(Config::default())?;
-    let alignments = aligner.align_files(&temp_yeast, &temp_yeast)?;
+    let alignments = aligner.align_files(&temp_chr1, &temp_chr1)?;
 
-    println!("\n=== Yeast Genome Alignment Analysis ===");
+    println!("\n=== Chromosome I Alignment Analysis ===");
     println!("Total alignments found: {}", alignments.len());
 
     // Collect alignment statistics
