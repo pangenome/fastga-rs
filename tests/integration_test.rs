@@ -4,6 +4,7 @@ use fastga_rs::{FastGA, Config};
 use std::path::Path;
 use std::fs;
 use anyhow::Result;
+use tempfile::TempDir;
 
 #[test]
 fn test_yeast_self_alignment() -> Result<()> {
@@ -30,12 +31,17 @@ fn test_yeast_self_alignment() -> Result<()> {
         }
     }
 
+    // Copy to temp directory to avoid GDB conflicts
+    let temp_dir = tempfile::TempDir::new()?;
+    let temp_yeast = temp_dir.path().join("yeast.fasta");
+    fs::copy(yeast_file, &temp_yeast)?;
+
     // Create aligner with default configuration
     let aligner = FastGA::new(Config::default())?;
 
     // Align yeast against itself
     println!("Running FastGA alignment on yeast sample...");
-    let alignments = aligner.align_files(yeast_file, yeast_file)?;
+    let alignments = aligner.align_files(&temp_yeast, &temp_yeast)?;
 
     // Basic validation
     assert!(!alignments.is_empty(), "Should find at least one alignment");

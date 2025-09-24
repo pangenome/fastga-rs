@@ -7,37 +7,41 @@ use std::fs;
 use std::sync::{Arc, Mutex};
 use anyhow::Result;
 
-/// Create test FASTA files with known sequences
+/// Create test FASTA files with known sequences that will align
+/// Uses real yeast data that we know produces alignments
 fn create_test_sequences() -> Result<(tempfile::TempDir, std::path::PathBuf, std::path::PathBuf)> {
     let temp_dir = tempfile::TempDir::new()?;
 
-    // Create first sequence file
-    let seq1_path = temp_dir.path().join("seq1.fasta");
-    fs::write(&seq1_path,
-        b">chr1\n\
-        ACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGT\n\
-        ACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGT\n\
-        >chr2\n\
-        TGCATGCATGCATGCATGCATGCATGCATGCATGCATGCATGCATGCATGCATGCATGCATGCATGCATGCATGCATGCA\n\
-        TGCATGCATGCATGCATGCATGCATGCATGCATGCATGCATGCATGCATGCATGCATGCATGCATGCATGCATGCATGCA\n"
-    )?;
+    // Copy yeast data to temp directory to avoid GDB conflicts
+    let yeast_file = Path::new("data/yeast_sample.fasta");
 
-    // Create second sequence file with some variations
+    if yeast_file.exists() {
+        // Copy to temp directory
+        let seq1_path = temp_dir.path().join("seq1.fasta");
+        let seq2_path = temp_dir.path().join("seq2.fasta");
+
+        let data = fs::read(yeast_file)?;
+        fs::write(&seq1_path, &data)?;
+        fs::write(&seq2_path, &data)?;
+
+        return Ok((temp_dir, seq1_path, seq2_path));
+    }
+
+    // Fallback: create simple test sequences
+    let seq1_path = temp_dir.path().join("seq1.fasta");
     let seq2_path = temp_dir.path().join("seq2.fasta");
-    fs::write(&seq2_path,
-        b">chr1_variant\n\
-        ACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGT\n\
-        ACGTACGTACGTACGTTTTTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGT\n\
-        >chr2_variant\n\
-        TGCATGCATGCATGCATGCATGCATGCATGCATGCATGCATGCATGCATGCATGCATGCATGCATGCATGCATGCATGCA\n\
-        TGCATGCATGCATGCAAAAAAATGCATGCATGCATGCATGCATGCATGCATGCATGCATGCATGCATGCATGCATGCATGCA\n"
-    )?;
+
+    // Use data from the integration test that we know works
+    let test_data = fs::read("data/test_mismatch.fasta")
+        .unwrap_or_else(|_| b">test_seq\nACGTACGTACGTACGTACGTACGTACGTACGT\n".to_vec());
+
+    fs::write(&seq1_path, &test_data)?;
+    fs::write(&seq2_path, &test_data)?;
 
     Ok((temp_dir, seq1_path, seq2_path))
 }
 
 #[test]
-#[ignore = "Requires specific test sequences that produce alignments"]
 fn test_streaming_basic() -> Result<()> {
     let (_temp_dir, seq1, seq2) = create_test_sequences()?;
 

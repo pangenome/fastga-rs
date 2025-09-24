@@ -7,8 +7,7 @@
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 use std::collections::HashMap;
-use crate::{Config, Alignment, Alignments, FastGAError, Result};
-use crate::ffi;
+use crate::{Config, Alignment, FastGAError, Result};
 
 /// Builder for configuring streaming alignment operations.
 ///
@@ -167,36 +166,40 @@ impl StreamingAligner {
             query_stats: HashMap::new(),
         }));
 
+        // For now, use the non-streaming approach since FFI streaming isn't implemented
+        // This will still work but won't have true streaming benefits
+        let aligner = crate::FastGA::new(self.config.clone())?;
+        let alignments = aligner.align_files(
+            Path::new(genome1_str),
+            Path::new(genome2_str)
+        )?;
+
         let stats_clone = Arc::clone(&stats);
-        let filters = &self.filters;
 
-        // Create wrapper callback that applies filters
-        let result = ffi::streaming::align_streaming(
-            genome1_str,
-            genome2_str,
-            self.config.num_threads,
-            self.config.min_alignment_length,
-            self.config.min_identity.unwrap_or(0.0),
-            move |alignment: Alignment| {
-                let mut stats = stats_clone.lock().unwrap();
-                stats.total_alignments += 1;
+        // Process each alignment
+        for alignment in alignments.alignments {
+            let mut stats = stats_clone.lock().unwrap();
+            stats.total_alignments += 1;
 
-                // Update per-query statistics
-                let query_stat = stats.query_stats
-                    .entry(alignment.query_name.clone())
-                    .or_default();
-                query_stat.alignment_count += 1;
-                query_stat.best_identity = query_stat.best_identity.max(alignment.identity());
-                query_stat.bases_aligned += alignment.query_end - alignment.query_start;
+            // Update per-query statistics
+            let query_stat = stats.query_stats
+                .entry(alignment.query_name.clone())
+                .or_default();
+            query_stat.alignment_count += 1;
+            query_stat.best_identity = query_stat.best_identity.max(alignment.identity());
+            query_stat.bases_aligned += alignment.query_end - alignment.query_start;
 
-                // Apply filters
-                for filter in filters {
-                    if !filter(&alignment) {
-                        stats.filtered_alignments += 1;
-                        return false;  // Skip this alignment
-                    }
+            // Apply filters
+            let mut filtered = false;
+            for filter in &self.filters {
+                if !filter(&alignment) {
+                    stats.filtered_alignments += 1;
+                    filtered = true;
+                    break;
                 }
+            }
 
+            if !filtered {
                 // Call user callback
                 let keep = callback(alignment);
                 if keep {
@@ -204,10 +207,8 @@ impl StreamingAligner {
                 } else {
                     stats.filtered_alignments += 1;
                 }
-
-                keep
-            },
-        )?;
+            }
+        }
 
         // Apply aggregators after streaming (on kept alignments)
         // This is a simplified approach - in production we'd use a different pattern
