@@ -95,7 +95,6 @@ fn test_timeout_aligner() -> Result<()> {
 }
 
 #[test]
-#[ignore]  // This test requires real chromosome data
 fn test_with_real_data() -> Result<()> {
     use std::path::Path;
 

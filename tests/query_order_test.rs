@@ -4,17 +4,28 @@ use fastga_rs::{Config, FastGA};
 /// This is critical for our streaming API assumptions!
 
 #[test]
-#[ignore] // FastGA requires complex sequences with sufficient entropy
 fn test_fastga_processes_queries_sequentially() -> Result<()> {
     // Create test data with 3 distinct queries
     let temp_dir = tempfile::TempDir::new()?;
 
-    // Queries with longer sequences that will produce good alignments
-    // Using longer repeats to ensure alignments are found
+    // Create complex sequences that FastGA can align
     let queries_fasta = temp_dir.path().join("queries.fa");
-    let seq_a = "ACGTACGTACGTACGTACGTACGTACGTACGT".repeat(10); // 320bp
-    let seq_b = "TGCATGCATGCATGCATGCATGCATGCATGCA".repeat(10); // 330bp
-    let seq_c = "AAAATTTTCCCCGGGGAAAATTTTCCCCGGGG".repeat(10); // 330bp
+    // Use yeast-like GC content and complexity
+    let seq_a = "ATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCG".to_string() +
+                "CTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAG" +
+                "GATAGATAGATAGATAGATAGATAGATAGATAGATAGATAGATAGATAGATAGATAGATAG" +
+                "TCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGA" +
+                "AGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCT";
+    let seq_b = "GCATGCATGCATGCATGCATGCATGCATGCATGCATGCATGCATGCATGCATGCATGCAT".to_string() +
+                "TATCGATGCATGCTAGCTACGATCGATGCTAGCTAGCATCGATCGATGCATGCTAGCTAG" +
+                "CGATCGATGCTAGCTAGCATCGATCGATCGTAGCTAGCTGCATGCATGCTAGCTAGCTAG" +
+                "ATGGCTAGCGATCGATGCATGCATCGATCGATGCTAGCTAGCATCGATGCTAGCTAGCAT" +
+                "CGATCGATCGTAGCTAGCTAGCATGCATGCTAGCTAGCTAGCGATCGATCGATGCTAGCT";
+    let seq_c = "GGAATTCCGGAATTCCGGAATTCCGGAATTCCGGAATTCCGGAATTCCGGAATTCCGGAA".to_string() +
+                "TTCCAAGCTTAAGCTTAAGCTTAAGCTTAAGCTTAAGCTTAAGCTTAAGCTTAAGCTTAA" +
+                "GCTTGGATCCGGATCCGGATCCGGATCCGGATCCGGATCCGGATCCGGATCCGGATCCGG" +
+                "ATCCCTCGAGCTCGAGCTCGAGCTCGAGCTCGAGCTCGAGCTCGAGCTCGAGCTCGAGCT" +
+                "CGAGTCTAGATCTAGATCTAGATCTAGATCTAGATCTAGATCTAGATCTAGATCTAGATC";
 
     std::fs::write(
         &queries_fasta,
@@ -28,8 +39,8 @@ fn test_fastga_processes_queries_sequentially() -> Result<()> {
     let target_a = seq_a.clone(); // Exact match to query_A
     let target_b = seq_b.clone(); // Exact match to query_B
     let target_c = seq_c.clone(); // Exact match to query_C
-    // Mixed target with partial matches
-    let target_mixed = format!("{}NNNN{}NNNN{}",
+    // Mixed target with partial matches from each
+    let target_mixed = format!("{}AAAAAA{}TTTTTT{}",
         &seq_a[..100], &seq_b[..100], &seq_c[..100]);
 
     std::fs::write(
@@ -119,14 +130,21 @@ fn test_fastga_processes_queries_sequentially() -> Result<()> {
 }
 
 #[test]
-#[ignore] // FastGA requires complex sequences with sufficient entropy
 fn test_query_completeness_with_multiple_targets() -> Result<()> {
     // Test that ALL alignments for a query are output before moving to next query
     let temp_dir = tempfile::TempDir::new()?;
 
-    // Create longer sequences for better alignment
-    let seq1 = "ACGTACGTACGTACGT".repeat(20); // 320bp
-    let seq2 = "TGCATGCATGCATGCA".repeat(20); // 320bp
+    // Create complex sequences for better alignment
+    let seq1 = "ATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCG".to_string() +
+               "CTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAG" +
+               "GATAGATAGATAGATAGATAGATAGATAGATAGATAGATAGATAGATAGATAGATAGATAG" +
+               "TCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGA" +
+               "AGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCT";
+    let seq2 = "GCATGCATGCATGCATGCATGCATGCATGCATGCATGCATGCATGCATGCATGCATGCAT".to_string() +
+               "TATCGATGCATGCTAGCTACGATCGATGCTAGCTAGCATCGATCGATGCATGCTAGCTAG" +
+               "CGATCGATGCTAGCTAGCATCGATCGATCGTAGCTAGCTGCATGCATGCTAGCTAGCTAG" +
+               "ATGGCTAGCGATCGATGCATGCATCGATCGATGCTAGCTAGCATCGATGCTAGCTAGCAT" +
+               "CGATCGATCGTAGCTAGCTAGCATGCATGCTAGCTAGCTAGCGATCGATCGATGCTAGCT";
 
     let queries_fasta = temp_dir.path().join("queries.fa");
     std::fs::write(
@@ -143,7 +161,9 @@ fn test_query_completeness_with_multiple_targets() -> Result<()> {
             seq1,  // Exact match to query_1
             &seq1[..150], &seq1[150..],  // Query_1 with gap
             &seq1[..200],  // Partial query_1
-            "TTTTTTTT".repeat(40),  // No match
+            ("GGAATTCCGGAATTCCGGAATTCCGGAATTCCGGAATTCCGGAATTCCGGAATTCCGGAA".to_string() +
+             "TTCCAAGCTTAAGCTTAAGCTTAAGCTTAAGCTTAAGCTTAAGCTTAAGCTTAAGCTTAA" +
+             "GCTTGGATCCGGATCCGGATCCGGATCCGGATCCGGATCCGGATCCGGATCCGGATCCGG"),  // Different, no match
             seq2  // Exact match to query_2
         )
     )?;
@@ -195,7 +215,6 @@ fn test_query_completeness_with_multiple_targets() -> Result<()> {
 }
 
 #[test]
-#[ignore] // Requires FastGA binaries to be built
 fn test_parallel_threads_still_sequential_queries() -> Result<()> {
     // Even with multiple threads, queries should be processed sequentially
     let temp_dir = tempfile::TempDir::new()?;

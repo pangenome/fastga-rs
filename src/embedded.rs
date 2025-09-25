@@ -195,12 +195,5 @@ where
 mod tests {
     use super::*;
 
-    #[test]
-    #[ignore] // Requires built binaries
-    fn test_binary_paths() {
-        let binaries = FastGABinaries::new().unwrap();
-        assert!(binaries.fastga_path.exists());
-        assert!(binaries.alntopaf_path.exists());
-        assert!(binaries.fatogdb_path.exists());
-    }
+    // Test removed - embedded binaries approach no longer used
 }
