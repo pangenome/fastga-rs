@@ -87,8 +87,14 @@ fn test_all_parameters_with_chrv() -> Result<()> {
 
     // Test 4: Advanced seeding parameters
     eprintln!("\n--- Test 4: Advanced Seeding Parameters ---");
+
+    // Clean up existing indices since we need different frequency
+    let _ = std::fs::remove_file(chrv_path.with_extension("gix"));
+    let _ = std::fs::remove_file(chrv_path.with_extension("1gdb.gix"));
+
     let config = Config::builder()
         .adaptive_seed_cutoff(20)
+        .frequency(20)  // Match the adaptive_seed_cutoff
         .min_chain_coverage(0.5)
         .chain_start_threshold(100)
         .num_threads(2)

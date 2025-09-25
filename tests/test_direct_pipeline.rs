@@ -12,11 +12,18 @@ fn test_prepare_and_align_separately() {
     let dir = tempdir().unwrap();
     let test_fa = dir.path().join("test.fa");
 
-    // Create test file
+    // Create test file with complex sequence
     let mut file = File::create(&test_fa).unwrap();
     writeln!(file, ">sequence1").unwrap();
-    writeln!(file, "ACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGT").unwrap();
-    writeln!(file, "TACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACG").unwrap();
+    // Use a more complex sequence that FastGA can align
+    writeln!(file, "ATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCG").unwrap();
+    writeln!(file, "CTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAG").unwrap();
+    writeln!(file, "GATAGATAGATAGATAGATAGATAGATAGATAGATAGATAGATAGATAGATAGATAGATAGATAGATAGATA").unwrap();
+    writeln!(file, "TCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGA").unwrap();
+    writeln!(file, "AGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCT").unwrap();
+    writeln!(file, "GCATGCATGCATGCATGCATGCATGCATGCATGCATGCATGCATGCATGCATGCATGCATGCATGCATGCAT").unwrap();
+    writeln!(file, "TATCTCGATGCATGCTAGCTACGATCGATGCTAGCTAGCATCGATCGATGCATGCTAGCTAGCGATCGATCG").unwrap();
+    writeln!(file, "CGATCGATGCTAGCTAGCATCGATCGATCGTAGCTAGCTGCATGCATGCTAGCTAGCTAGCGATCGATCGAT").unwrap();
     file.flush().unwrap();
 
     let bin_dir = find_bin_dir();

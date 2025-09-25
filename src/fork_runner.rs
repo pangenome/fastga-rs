@@ -65,29 +65,17 @@ pub fn fork_fatogdb(input_path: &Path) -> Result<PathBuf> {
             // Child process - run FAtoGDB
             eprintln!("[Fork] Child process running FAtoGDB");
 
-            // Method 1: Use our wrapper
-            let path_cstr = CString::new(input_path.to_string_lossy().to_string()).unwrap();
+            // Use fatogdb_main directly (wrapper not implemented)
+            let args = vec![
+                CString::new("FAtoGDB").unwrap(),
+                CString::new(input_path.to_string_lossy().to_string()).unwrap(),
+            ];
+
+            let argv: Vec<*const c_char> = args.iter().map(|s| s.as_ptr()).collect();
+
             let result = unsafe {
-                fatogdb_wrapper(path_cstr.as_ptr())
+                fatogdb_main(argv.len() as c_int, argv.as_ptr())
             };
-
-            if result != 0 {
-                // If wrapper fails, try using the main function directly
-                eprintln!("[Fork] Wrapper failed, trying fatogdb_main");
-
-                let args = vec![
-                    CString::new("FAtoGDB").unwrap(),
-                    CString::new(input_path.to_string_lossy().to_string()).unwrap(),
-                ];
-
-                let argv: Vec<*const c_char> = args.iter().map(|s| s.as_ptr()).collect();
-
-                let result = unsafe {
-                    fatogdb_main(argv.len() as c_int, argv.as_ptr())
-                };
-
-                exit(result);
-            }
 
             exit(result);
         }
@@ -254,13 +242,13 @@ impl ForkOrchestrator {
             cmd.arg(format!("-L:{}", log_path.display()));
         }
 
-        // Temp directory
+        // Temp directory (needs format -P<dir>)
         if let Some(ref temp_dir) = self.config.temp_dir {
-            cmd.arg("-P").arg(temp_dir);
+            cmd.arg(format!("-P{}", temp_dir.display()));
         }
 
-        // Add -g flag since we already created GDB files
-        cmd.arg("-g");
+        // Don't add -g flag - it's not a valid option
+        // FastGA will automatically use existing GDB files
 
         cmd.arg(query_path)
            .arg(target_path);
@@ -272,8 +260,9 @@ impl ForkOrchestrator {
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
+            eprintln!("[Fork] FastGA failed with: {}", stderr.trim());
             // Try without -g flag
-            eprintln!("[Fork] FastGA with -g failed, trying without");
+            eprintln!("[Fork] Trying without -g flag");
 
             let mut cmd2 = Command::new(&fastga);
 
@@ -313,7 +302,7 @@ impl ForkOrchestrator {
                 cmd2.arg(format!("-L:{}", log_path.display()));
             }
             if let Some(ref temp_dir) = self.config.temp_dir {
-                cmd2.arg("-P").arg(temp_dir);
+                cmd2.arg(format!("-P{}", temp_dir.display()));
             }
 
             cmd2.arg(query_path)
