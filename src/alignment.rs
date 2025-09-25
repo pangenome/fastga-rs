@@ -5,6 +5,9 @@
 
 use crate::error::{FastGAError, Result};
 use std::fmt;
+use std::fs::File;
+use std::io::{Write, BufWriter};
+use std::path::{Path, PathBuf};
 
 /// A single local alignment between two sequences.
 ///
@@ -216,7 +219,7 @@ impl Alignment {
 }
 
 /// Collection of alignments with format conversion capabilities.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Alignments {
     /// Vector of individual alignments
     pub alignments: Vec<Alignment>,
@@ -297,6 +300,147 @@ impl Alignments {
 
         groups
     }
+
+    /// Writes alignments to a file in PAF format.
+    ///
+    /// # Example
+    /// ```no_run
+    /// # use fastga_rs::Alignments;
+    /// # use anyhow::Result;
+    /// # fn main() -> Result<()> {
+    /// # let alignments = Alignments::new();
+    /// alignments.write_paf("output.paf")?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn write_paf<P: AsRef<Path>>(&self, path: P) -> Result<()> {
+        let file = File::create(path)?;
+        let mut writer = BufWriter::new(file);
+
+        for alignment in &self.alignments {
+            writeln!(writer, "{}", alignment.to_paf())?;
+        }
+
+        writer.flush()?;
+        Ok(())
+    }
+
+    /// Writes alignments to a file in tabular format (TSV).
+    ///
+    /// Includes headers for easy parsing in spreadsheet programs.
+    pub fn write_tsv<P: AsRef<Path>>(&self, path: P) -> Result<()> {
+        let file = File::create(path)?;
+        let mut writer = BufWriter::new(file);
+
+        // Write header
+        writeln!(writer, "query\tq_len\tq_start\tq_end\tstrand\ttarget\tt_len\tt_start\tt_end\tmatches\tblock_len\tidentity\tcigar")?;
+
+        // Write alignments
+        for a in &self.alignments {
+            writeln!(writer, "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{:.3}\t{}",
+                a.query_name,
+                a.query_len,
+                a.query_start,
+                a.query_end,
+                a.strand,
+                a.target_name,
+                a.target_len,
+                a.target_start,
+                a.target_end,
+                a.matches,
+                a.block_len,
+                a.identity(),
+                a.cigar
+            )?;
+        }
+
+        writer.flush()?;
+        Ok(())
+    }
+
+    /// Writes alignments to a file in JSON format.
+    ///
+    /// Useful for programmatic parsing and integration with other tools.
+    pub fn write_json<P: AsRef<Path>>(&self, path: P) -> Result<()> {
+        let file = File::create(path)?;
+        let mut writer = BufWriter::new(file);
+
+        writeln!(writer, "[")?;
+        for (i, alignment) in self.alignments.iter().enumerate() {
+            write!(writer, "  {{")?;
+            write!(writer, r#""query_name":"{}","#, alignment.query_name)?;
+            write!(writer, r#""query_len":{},"#, alignment.query_len)?;
+            write!(writer, r#""query_start":{},"#, alignment.query_start)?;
+            write!(writer, r#""query_end":{},"#, alignment.query_end)?;
+            write!(writer, r#""strand":"{}","#, alignment.strand)?;
+            write!(writer, r#""target_name":"{}","#, alignment.target_name)?;
+            write!(writer, r#""target_len":{},"#, alignment.target_len)?;
+            write!(writer, r#""target_start":{},"#, alignment.target_start)?;
+            write!(writer, r#""target_end":{},"#, alignment.target_end)?;
+            write!(writer, r#""matches":{},"#, alignment.matches)?;
+            write!(writer, r#""block_len":{},"#, alignment.block_len)?;
+            write!(writer, r#""identity":{:.4},"#, alignment.identity())?;
+            write!(writer, r#""mapping_quality":{},"#, alignment.mapping_quality)?;
+            write!(writer, r#""mismatches":{},"#, alignment.mismatches)?;
+            write!(writer, r#""gap_opens":{},"#, alignment.gap_opens)?;
+            write!(writer, r#""gap_len":{},"#, alignment.gap_len)?;
+            write!(writer, r#""cigar":"{}""#, alignment.cigar)?;
+            write!(writer, "}}")?;
+            if i < self.alignments.len() - 1 {
+                writeln!(writer, ",")?;
+            } else {
+                writeln!(writer)?;
+            }
+        }
+        writeln!(writer, "]")?;
+
+        writer.flush()?;
+        Ok(())
+    }
+
+    /// Reads alignments from a PAF file.
+    pub fn read_paf<P: AsRef<Path>>(path: P) -> Result<Self> {
+        let contents = std::fs::read_to_string(path)?;
+        Self::from_paf(&contents)
+    }
+
+    /// Returns summary statistics about the alignments.
+    pub fn summary(&self) -> AlignmentSummary {
+        if self.alignments.is_empty() {
+            return AlignmentSummary::default();
+        }
+
+        let total_matches: usize = self.alignments.iter().map(|a| a.matches).sum();
+        let total_mismatches: usize = self.alignments.iter().map(|a| a.mismatches).sum();
+        let total_gaps: usize = self.alignments.iter().map(|a| a.gap_len).sum();
+
+        let identities: Vec<f64> = self.alignments.iter().map(|a| a.identity()).collect();
+        let mean_identity = identities.iter().sum::<f64>() / identities.len() as f64;
+        let min_identity = identities.iter().fold(1.0f64, |a, &b| a.min(b));
+        let max_identity = identities.iter().fold(0.0f64, |a, &b| a.max(b));
+
+        AlignmentSummary {
+            num_alignments: self.alignments.len(),
+            total_matches,
+            total_mismatches,
+            total_gaps,
+            mean_identity,
+            min_identity,
+            max_identity,
+        }
+    }
+}
+
+/// Summary statistics for a collection of alignments
+#[derive(Debug, Clone, Default)]
+pub struct AlignmentSummary {
+    pub num_alignments: usize,
+    pub total_matches: usize,
+    pub total_mismatches: usize,
+    pub total_gaps: usize,
+    pub mean_identity: f64,
+    pub min_identity: f64,
+    pub max_identity: f64,
 }
 
 impl fmt::Display for Alignments {

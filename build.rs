@@ -15,6 +15,19 @@ fn main() {
     // Compile FastGA as a static library
     println!("cargo:warning=Building FastGA as static library...");
 
+    // Build our wrapper functions
+    cc::Build::new()
+        .file(fastga_dir.join("rust_wrappers.c"))
+        .file(fastga_dir.join("GDB.c"))
+        .file(fastga_dir.join("gene_core.c"))
+        .file(fastga_dir.join("ONElib.c"))
+        .include(&fastga_dir)
+        .flag("-O3")
+        .flag("-fno-strict-aliasing")
+        .warnings(false)
+        .define("_GNU_SOURCE", None)
+        .compile("fastga_wrappers");
+
     // We need to compile each program separately to avoid redefining main multiple times
     // First compile FastGA with main renamed
     let mut fastga_build = cc::Build::new();

@@ -45,6 +45,42 @@ pub struct Config {
 
     /// Keep intermediate files for debugging
     pub keep_intermediates: bool,
+
+    /// Enable verbose mode for detailed progress
+    pub verbose: bool,
+
+    /// Use symmetric seeding (default: false, not recommended)
+    pub symmetric_seeding: bool,
+
+    /// Log file path for detailed output
+    pub log_file: Option<PathBuf>,
+
+    /// Output format: "pafx" (default), "pafm", "pafs", "pafS", "psl"
+    pub output_format: OutputFormat,
+
+    /// Adaptive seed count cutoff (-f parameter)
+    pub adaptive_seed_cutoff: Option<usize>,
+
+    /// Minimum seed chain coverage in both genomes (-c parameter)
+    pub min_chain_coverage: Option<f64>,
+
+    /// Threshold for starting a new seed chain (-s parameter)
+    pub chain_start_threshold: Option<usize>,
+}
+
+/// Output format for alignments
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum OutputFormat {
+    /// PAF with CIGAR string using X's for mismatches (default)
+    PafWithX,
+    /// PAF with CIGAR string using ='s for matches
+    PafWithM,
+    /// PAF with CS string in short form
+    PafShort,
+    /// PAF with CS string in long form
+    PafLong,
+    /// PSL format
+    Psl,
 }
 
 impl Default for Config {
@@ -59,6 +95,13 @@ impl Default for Config {
             temp_dir: None,
             soft_masking: true,
             keep_intermediates: false,
+            verbose: false,
+            symmetric_seeding: false,
+            log_file: None,
+            output_format: OutputFormat::PafWithX,
+            adaptive_seed_cutoff: None,
+            min_chain_coverage: None,
+            chain_start_threshold: None,
         }
     }
 }
@@ -168,6 +211,62 @@ impl ConfigBuilder {
     /// Default: false
     pub fn keep_intermediates(mut self, keep: bool) -> Self {
         self.config.keep_intermediates = keep;
+        self
+    }
+
+    /// Enable verbose mode for detailed progress output.
+    ///
+    /// Default: false
+    pub fn verbose(mut self, verbose: bool) -> Self {
+        self.config.verbose = verbose;
+        self
+    }
+
+    /// Use symmetric seeding (not recommended by FastGA authors).
+    ///
+    /// Default: false
+    pub fn symmetric_seeding(mut self, symmetric: bool) -> Self {
+        self.config.symmetric_seeding = symmetric;
+        self
+    }
+
+    /// Set log file path for detailed output.
+    ///
+    /// Default: None
+    pub fn log_file(mut self, path: PathBuf) -> Self {
+        self.config.log_file = Some(path);
+        self
+    }
+
+    /// Set output format for alignments.
+    ///
+    /// Default: PafWithX
+    pub fn output_format(mut self, format: OutputFormat) -> Self {
+        self.config.output_format = format;
+        self
+    }
+
+    /// Set adaptive seed count cutoff (-f parameter).
+    ///
+    /// Default: None (use FastGA default)
+    pub fn adaptive_seed_cutoff(mut self, cutoff: usize) -> Self {
+        self.config.adaptive_seed_cutoff = Some(cutoff);
+        self
+    }
+
+    /// Set minimum seed chain coverage in both genomes (-c parameter).
+    ///
+    /// Default: None (use FastGA default)
+    pub fn min_chain_coverage(mut self, coverage: f64) -> Self {
+        self.config.min_chain_coverage = Some(coverage);
+        self
+    }
+
+    /// Set threshold for starting a new seed chain (-s parameter).
+    ///
+    /// Default: None (use FastGA default)
+    pub fn chain_start_threshold(mut self, threshold: usize) -> Self {
+        self.config.chain_start_threshold = Some(threshold);
         self
     }
 

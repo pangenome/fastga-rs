@@ -61,6 +61,8 @@ pub mod config;
 pub mod embedded;
 pub mod error;
 pub mod ffi;
+pub mod fork_api;
+pub mod fork_runner;
 pub mod intermediate;
 pub mod orchestrator;
 pub mod query_set;
@@ -69,24 +71,20 @@ pub mod streaming;
 pub mod timeout;
 
 use error::Result;
-use std::fs;
 use std::path::Path;
-use std::process::Command;
-use tempfile::TempDir;
 
 pub use alignment::{Alignment, Alignments};
-pub use config::Config;
+pub use config::{Config, OutputFormat};
 pub use error::FastGAError;
 pub use query_set::{align_queries, QueryAlignmentIterator, QueryAlignmentSet};
 
 /// Main interface to the FastGA alignment engine.
 ///
-/// This struct provides the primary API for performing genome alignments.
-/// It manages temporary files, executes the FastGA binary with appropriate
-/// parameters, and parses the output into structured alignment data.
+/// This uses the fork-based implementation to avoid FFI hanging issues.
+/// Each utility (FAtoGDB, GIXmake) runs in an isolated child process.
 #[derive(Debug)]
 pub struct FastGA {
-    config: Config,
+    inner: fork_api::ForkFastGA,
 }
 
 impl FastGA {
@@ -112,7 +110,9 @@ impl FastGA {
     /// # }
     /// ```
     pub fn new(config: Config) -> Result<Self> {
-        Ok(FastGA { config })
+        Ok(FastGA {
+            inner: fork_api::ForkFastGA::new(config)?,
+        })
     }
 
     /// Aligns two genome files and returns the alignments.
@@ -133,22 +133,7 @@ impl FastGA {
     /// - FastGA execution fails
     /// - Output parsing fails
     pub fn align_files(&self, genome1: &Path, genome2: &Path) -> Result<Alignments> {
-        // Validate input files
-        if !genome1.exists() {
-            return Err(FastGAError::FileNotFound(genome1.to_path_buf()));
-        }
-        if !genome2.exists() {
-            return Err(FastGAError::FileNotFound(genome2.to_path_buf()));
-        }
-
-        // Create temporary directory for intermediate files
-        let temp_dir = TempDir::new()?;
-
-        // Execute FastGA with extended CIGAR output
-        let output = self.run_fastga(genome1, genome2, &temp_dir)?;
-
-        // Parse PAF output into alignments
-        Alignments::from_paf(&output)
+        self.inner.align_files(genome1, genome2)
     }
 
     /// Aligns sequences provided as byte arrays.
@@ -163,114 +148,20 @@ impl FastGA {
     /// # Returns
     /// Alignments between the two sequences
     pub fn align_sequences(&self, seq1: &[u8], seq2: &[u8]) -> Result<Alignments> {
-        let temp_dir = TempDir::new()?;
-
-        // Write sequences to temporary files
-        let file1 = temp_dir.path().join("seq1.fasta");
-        let file2 = temp_dir.path().join("seq2.fasta");
-
-        fs::write(&file1, seq1)?;
-        fs::write(&file2, seq2)?;
-
-        self.align_files(&file1, &file2)
+        self.inner.align_sequences(seq1, seq2)
     }
 
-    /// Executes FastGA binary with appropriate parameters.
-    fn run_fastga(&self, genome1: &Path, genome2: &Path, _temp_dir: &TempDir) -> Result<String> {
-        // Use the simple runner which is more reliable than FFI
-        simple_runner::run_fastga_simple(
-            genome1,
-            genome2,
-            self.config.num_threads,
-            self.config.min_alignment_length,
-            self.config.min_identity,
-        )
-    }
-
-    /// Aligns sequences with streaming output and filtering capability.
-    ///
-    /// This method provides fine-grained control over alignment processing,
-    /// allowing you to filter or process alignments as they are generated.
-    /// This is particularly useful for:
-    /// - Large-scale alignments where memory is a concern
-    /// - Query-vs-all scenarios where you want to filter per query
-    /// - Real-time alignment processing pipelines
+    /// Align two genome files and write output directly to disk.
     ///
     /// # Arguments
-    /// * `genome1` - Path to query genome file
-    /// * `genome2` - Path to target genome file
-    /// * `callback` - Function called for each alignment as it's generated
-    ///
-    /// # Example
-    /// ```no_run
-    /// # use anyhow::Result;
-    /// # fn main() -> Result<()> {
-    /// use fastga_rs::{FastGA, Config, Alignment};
-    /// use std::path::Path;
-    ///
-    /// let aligner = FastGA::new(Config::default())?;
-    /// let mut filtered_alignments = Vec::new();
-    ///
-    /// aligner.align_streaming(
-    ///     Path::new("query.fasta"),
-    ///     Path::new("target.fasta"),
-    ///     |alignment: Alignment| {
-    ///         // Filter alignments with identity > 90%
-    ///         if alignment.identity() > 0.9 {
-    ///             filtered_alignments.push(alignment);
-    ///             true  // Continue processing
-    ///         } else {
-    ///             true  // Continue but don't store
-    ///         }
-    ///     }
-    /// )?;
-    /// # Ok(())
-    /// # }
-    /// ```
-    pub fn align_streaming<F>(&self, genome1: &Path, genome2: &Path, callback: F) -> Result<()>
-    where
-        F: FnMut(Alignment) -> bool,
-    {
-        // Use the streaming API
-        let mut aligner = streaming::StreamingAligner::new(self.config.clone());
-        let stats = aligner.align_files(genome1, genome2, callback)?;
-
-        eprintln!(
-            "Streaming alignment complete: {} alignments processed, {} kept",
-            stats.total_alignments, stats.kept_alignments
-        );
-
-        Ok(())
-    }
-
-    /// Aligns a single query sequence against all sequences in a target file.
-    ///
-    /// This method is optimized for the common case of aligning one query
-    /// against a database of targets, with immediate filtering capability.
-    ///
-    /// # Arguments
-    /// * `query` - Query sequence as bytes
-    /// * `target_file` - Path to target genome file
-    /// * `filter` - Optional filter function for alignments
+    /// * `genome1` - Path to query genome
+    /// * `genome2` - Path to target genome
+    /// * `output_path` - Path where to write PAF output
     ///
     /// # Returns
-    /// Only the alignments that pass the filter
-    pub fn align_query_vs_all<F>(
-        &self,
-        query: &[u8],
-        target_file: &Path,
-        filter: Option<F>,
-    ) -> Result<Vec<Alignment>>
-    where
-        F: Fn(&Alignment) -> bool + 'static,
-    {
-        let mut aligner = streaming::StreamingAligner::new(self.config.clone());
-
-        if let Some(filter_fn) = filter {
-            aligner.filter(filter_fn);
-        }
-
-        aligner.align_query_vs_all(query, target_file, |_| true)
+    /// The number of alignments written
+    pub fn align_to_file(&self, genome1: &Path, genome2: &Path, output_path: &Path) -> Result<usize> {
+        self.inner.align_to_file(genome1, genome2, output_path)
     }
 }
 

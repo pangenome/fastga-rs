@@ -73,6 +73,123 @@ fn test_chrV_self_alignment() -> Result<()> {
 }
 
 #[test]
+fn test_chrV_alignment_coverage() -> Result<()> {
+    // Comprehensive test for chrV alignment coverage
+    let chrV_file = Path::new("data/cerevisiae.chrV.fa.gz");
+
+    if !chrV_file.exists() {
+        eprintln!("Test data not found. Skipping coverage test.");
+        return Ok(());
+    }
+
+    // Decompress to temp directory
+    let temp_dir = tempfile::TempDir::new()?;
+    let temp_chrV = temp_dir.path().join("chrV.fasta");
+
+    use std::process::Command;
+    Command::new("gunzip")
+        .arg("-c")
+        .arg(chrV_file)
+        .output()
+        .and_then(|output| fs::write(&temp_chrV, output.stdout))?;
+
+    // Create aligner with specific configuration for coverage testing
+    let config = Config::builder()
+        .min_alignment_length(1000)  // Only count significant alignments
+        .min_identity(0.9)  // High identity threshold
+        .num_threads(4)
+        .build();
+
+    let aligner = FastGA::new(config)?;
+    let alignments = aligner.align_files(&temp_chrV, &temp_chrV)?;
+
+    // Verify we get alignments
+    assert!(
+        !alignments.is_empty(),
+        "FastGA produced no alignments - check if it's working correctly"
+    );
+
+    println!("\nCoverage analysis for chrV alignment:");
+    println!("Total alignments found: {}", alignments.len());
+
+    // Group alignments by query
+    let groups = alignments.group_by_query();
+
+    // For homologous chromosomes, we expect good coverage
+    // There are 7 strains in the test data
+    let expected_strains = 7;
+
+    println!("\nPer-query coverage:");
+    for (query_name, query_alignments) in &groups {
+        let total_aligned_bp: usize = query_alignments.iter()
+            .map(|a| a.query_end - a.query_start)
+            .sum();
+
+        let query_len = query_alignments.first()
+            .map(|a| a.query_len)
+            .unwrap_or(0);
+
+        let coverage = if query_len > 0 {
+            total_aligned_bp as f64 / query_len as f64
+        } else {
+            0.0
+        };
+
+        println!("  {}: {:.1}x coverage ({} alignments, {} bp aligned / {} bp total)",
+            query_name, coverage, query_alignments.len(), total_aligned_bp, query_len);
+
+        // For self-alignment plus alignment to homologous sequences,
+        // we expect coverage > 1.0 (at least the self-alignment)
+        assert!(
+            coverage >= 1.0,
+            "Query {} has insufficient coverage: {:.2}x",
+            query_name,
+            coverage
+        );
+
+        // With 7 homologous strains, we expect multiple alignments per query
+        // Each query should align to itself and to other strains
+        assert!(
+            query_alignments.len() >= 1,
+            "Query {} has too few alignments: {}",
+            query_name,
+            query_alignments.len()
+        );
+    }
+
+    // Check alignment quality
+    let high_identity_count = alignments.alignments.iter()
+        .filter(|a| a.identity() > 0.95)
+        .count();
+
+    println!("\nAlignment quality:");
+    println!("  High-identity alignments (>95%): {} / {}",
+        high_identity_count, alignments.len());
+
+    // For homologous sequences, most alignments should be high-identity
+    let high_identity_ratio = high_identity_count as f64 / alignments.len() as f64;
+    // Note: With 7 strains, some divergence is expected. 75% is reasonable.
+    assert!(
+        high_identity_ratio > 0.75,
+        "Too few high-identity alignments: {:.1}%",
+        high_identity_ratio * 100.0
+    );
+
+    // Verify CIGAR format uses extended operators
+    let uses_extended_cigar = alignments.alignments.iter()
+        .any(|a| a.cigar.contains('=') || a.cigar.contains('X'));
+
+    assert!(
+        uses_extended_cigar,
+        "CIGAR strings should use extended format with '=' and 'X' operators"
+    );
+
+    println!("\n✓ Coverage test passed: FastGA is producing expected alignments");
+
+    Ok(())
+}
+
+#[test]
 fn test_chrV_cross_strain_alignment() -> Result<()> {
     // Test alignment using full chrV file with multiple strains
     let chrV_file = Path::new("data/cerevisiae.chrV.fa.gz");

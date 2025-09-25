@@ -27,13 +27,12 @@ impl TimeoutExt for FastGA {
     ) -> Result<Alignments> {
         let genome1 = genome1.to_path_buf();
         let genome2 = genome2.to_path_buf();
-        let config = self.config.clone();
+        let inner_clone = self.inner.clone();
 
         let (tx, rx) = mpsc::channel();
 
         thread::spawn(move || {
-            let aligner = FastGA::new(config).unwrap();
-            let result = aligner.align_files(&genome1, &genome2);
+            let result = inner_clone.align_files(&genome1, &genome2);
             let _ = tx.send(result);
         });
 
