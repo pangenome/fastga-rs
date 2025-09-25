@@ -45,16 +45,27 @@ impl FastGAOrchestrator {
 
     /// Main alignment function - orchestrates the entire process
     pub fn align(&self, query_path: &Path, target_path: &Path) -> Result<Vec<u8>> {
+        eprintln!("[FastGA] Starting alignment process...");
+        eprintln!("[FastGA] Query: {:?}", query_path);
+        eprintln!("[FastGA] Target: {:?}", target_path);
         // Step 1: Convert FASTA files to GDB format if needed
+        eprintln!("[FastGA] Step 1: Converting FASTA to GDB format...");
         let query_gdb = self.prepare_gdb(query_path)?;
+        eprintln!("[FastGA] Query GDB created: {}", query_gdb);
         let target_gdb = self.prepare_gdb(target_path)?;
+        eprintln!("[FastGA] Target GDB created: {}", target_gdb);
 
         // Step 2: Create k-mer indices if needed
+        eprintln!("[FastGA] Step 2: Creating k-mer indices...");
         self.create_index(&query_gdb, self.kmer_freq)?;
+        eprintln!("[FastGA] Query index created");
         self.create_index(&target_gdb, self.kmer_freq)?;
+        eprintln!("[FastGA] Target index created");
 
         // Step 3: Perform the actual alignment
+        eprintln!("[FastGA] Step 3: Running alignment...");
         let paf_output = self.run_alignment(&query_gdb, &target_gdb)?;
+        eprintln!("[FastGA] Alignment complete, output size: {} bytes", paf_output.len());
 
         // Clean up temporary files
         self.cleanup(&query_gdb)?;
@@ -65,6 +76,7 @@ impl FastGAOrchestrator {
 
     /// Convert FASTA to GDB format using FAtoGDB
     fn prepare_gdb(&self, fasta_path: &Path) -> Result<String> {
+        eprintln!("[FastGA] prepare_gdb: Converting {:?} to GDB", fasta_path);
         let gdb_path = fasta_path.with_extension("gdb");
 
         // Check if GDB already exists and is up-to-date
@@ -89,7 +101,9 @@ impl FastGAOrchestrator {
 
         let argv: Vec<*const c_char> = args.iter().map(|s| s.as_ptr()).collect();
 
+        eprintln!("[FastGA] Calling fatogdb_main with args: {:?}", args.iter().map(|s| s.to_str().unwrap()).collect::<Vec<_>>());
         let result = unsafe { fatogdb_main(argv.len() as c_int, argv.as_ptr()) };
+        eprintln!("[FastGA] fatogdb_main returned: {}", result);
 
         if result != 0 {
             return Err(FastGAError::Other(format!(
@@ -103,6 +117,7 @@ impl FastGAOrchestrator {
 
     /// Create k-mer index using GIXmake
     fn create_index(&self, gdb_path: &str, freq: i32) -> Result<()> {
+        eprintln!("[FastGA] create_index: Creating index for {}", gdb_path);
         let gix_path = gdb_path.replace(".gdb", ".gix");
 
         // Check if index already exists
@@ -122,7 +137,9 @@ impl FastGAOrchestrator {
 
         let argv: Vec<*const c_char> = args.iter().map(|s| s.as_ptr()).collect();
 
+        eprintln!("[FastGA] Calling gixmake_main with args: {:?}", args.iter().map(|s| s.to_str().unwrap()).collect::<Vec<_>>());
         let result = unsafe { gixmake_main(argv.len() as c_int, argv.as_ptr()) };
+        eprintln!("[FastGA] gixmake_main returned: {}", result);
 
         if result != 0 {
             return Err(FastGAError::Other(format!(
@@ -136,6 +153,7 @@ impl FastGAOrchestrator {
 
     /// Run the actual alignment algorithm
     fn run_alignment(&self, query_gdb: &str, target_gdb: &str) -> Result<Vec<u8>> {
+        eprintln!("[FastGA] run_alignment: Aligning {} vs {}", query_gdb, target_gdb);
         // This is where we'd call the core alignment functions from FastGA
         // For now, we'll still use the wrapped main function, but ideally
         // we'd extract and call the actual alignment logic directly
@@ -175,7 +193,9 @@ impl FastGAOrchestrator {
             fn fastga_main(argc: c_int, argv: *const *const c_char) -> c_int;
         }
 
+        eprintln!("[FastGA] Calling fastga_main with args: {:?}", args.iter().map(|s| s.to_str().unwrap()).collect::<Vec<_>>());
         let result = unsafe { fastga_main(argv.len() as c_int, argv.as_ptr()) };
+        eprintln!("[FastGA] fastga_main returned: {}", result);
 
         // Restore stdout
         unsafe {

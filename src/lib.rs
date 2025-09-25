@@ -61,9 +61,12 @@ pub mod config;
 pub mod embedded;
 pub mod error;
 pub mod ffi;
+pub mod intermediate;
 pub mod orchestrator;
 pub mod query_set;
+pub mod simple_runner;
 pub mod streaming;
+pub mod timeout;
 
 use error::Result;
 use std::fs;
@@ -174,10 +177,14 @@ impl FastGA {
 
     /// Executes FastGA binary with appropriate parameters.
     fn run_fastga(&self, genome1: &Path, genome2: &Path, _temp_dir: &TempDir) -> Result<String> {
-        // Use our Rust orchestrator that calls FFI functions directly
-        let output = orchestrator::align_direct(genome1, genome2, self.config.clone())?;
-
-        Ok(String::from_utf8_lossy(&output).to_string())
+        // Use the simple runner which is more reliable than FFI
+        simple_runner::run_fastga_simple(
+            genome1,
+            genome2,
+            self.config.num_threads,
+            self.config.min_alignment_length,
+            self.config.min_identity,
+        )
     }
 
     /// Aligns sequences with streaming output and filtering capability.
