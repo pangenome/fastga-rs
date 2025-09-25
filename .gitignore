@@ -1,3 +1,27 @@
+# Build outputs
 /target
+
+# FastGA intermediate files
 *.gix
 *.gdb
+*.1gdb
+*.bps
+*.ktab.*
+.*.bps
+.*.ktab.*
+
+# Test outputs
+*.paf
+*.fa
+*.fasta
+test*.rs
+test*.sh
+
+# Temporary files
+*.tmp
+*.swp
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
