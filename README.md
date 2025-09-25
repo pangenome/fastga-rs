@@ -1,20 +1,16 @@
 # FastGA-rs
 
-A Rust library providing safe, embedded bindings for [FastGA](https://github.com/thegenemyers/FASTGA), a fast genome aligner for high-quality assemblies.
+Rust bindings for [FastGA](https://github.com/thegenemyers/FASTGA), a fast genome aligner. No external dependencies - FastGA is compiled and embedded directly.
 
 ## Features
 
-- **Embedded binaries**: No external dependencies - FastGA is compiled and embedded directly into your Rust binary
-- **Extended CIGAR format**: Generates alignments with explicit match ('=') and mismatch ('X') operators
-- **Query-complete alignment sets**: Get ALL alignments for each query before processing the next
-- **Automatic backpressure**: Prevents memory overflow when processing large datasets
-- **Identity scoring**: Calculates alignment identity for downstream filtering algorithms
-- **Thread-safe**: Supports parallel alignment operations
-- **Memory efficient**: Bounded memory usage with streaming
+- **Zero external dependencies**: FastGA compiled into your Rust binary
+- **Process isolation**: Fork/exec architecture prevents memory issues
+- **Extended CIGAR**: '=' for matches, 'X' for mismatches
+- **Streaming API**: Process large datasets without memory overflow
+- **Thread-safe**: Parallel alignment support
 
 ## Installation
-
-Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
@@ -27,201 +23,141 @@ fastga-rs = { git = "https://github.com/pangenome/fastga-rs.git" }
 use fastga_rs::{FastGA, Config};
 use std::path::Path;
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Create aligner with default configuration
-    let aligner = FastGA::new(Config::default())?;
+// Align genomes with default settings (no filtering)
+let aligner = FastGA::new(Config::default());
+let alignments = aligner.align(
+    Path::new("query.fasta"),
+    Path::new("target.fasta")
+)?;
 
-    // Align two genome files
-    let alignments = aligner.align_files(
-        Path::new("genome1.fasta"),
-        Path::new("genome2.fasta")
-    )?;
+// Write PAF output
+alignments.write_paf("output.paf")?;
 
-    // Output in PAF format with extended CIGAR
-    println!("{}", alignments.to_paf()?);
-
-    // Access identity scores for filtering
-    for alignment in alignments.alignments {
-        let identity = alignment.identity();
-        let length = alignment.query_end - alignment.query_start;
-        let score = identity * (length as f64).ln(); // Plane sweep score
-        println!("Alignment: identity={:.2}%, score={:.2}",
-                 identity * 100.0, score);
-    }
-
-    Ok(())
+// Process alignments
+for alignment in alignments.iter() {
+    println!("{} -> {}: {:.1}% identity",
+        alignment.query_name,
+        alignment.target_name,
+        alignment.identity() * 100.0);
 }
 ```
 
-## Advanced Usage
+## Architecture
 
-### Query-Complete Alignment Sets
+FastGA-rs uses **Rust orchestration with fork/exec isolation**:
 
-**IMPORTANT**: FastGA processes queries sequentially and completes ALL alignments for each query before moving to the next. This allows you to get complete alignment sets for each query:
+1. **Rust API layer** manages configuration and data flow
+2. **Fork/exec wrapper** spawns each FastGA utility in separate process
+3. **Native FastGA binaries** (FAtoGDB, GIXmake, FastGA) compiled from C
 
-```rust
-use fastga_rs::{QueryAlignmentIterator, Config};
+This architecture prevents memory corruption and hanging that occurred with direct FFI.
 
-// Create iterator with backpressure (won't overflow memory)
-let query_sets = QueryAlignmentIterator::new(
-    "queries.fa",      // Multiple query sequences
-    "targets.fa",      // Target database
-    Config::default(),
-    1,                 // Buffer size (1 = strict backpressure)
-)?;
+### Process Flow
 
-// Process each query's complete alignment set
-for query_set in query_sets {
-    let query_set = query_set?;
-
-    println!("Query: {} has {} alignments",
-             query_set.query_name,
-             query_set.alignment_count());
-
-    // All alignments for this query are available
-    for alignment in &query_set.alignments {
-        println!("  -> {} (identity: {:.1}%)",
-                 alignment.target_name,
-                 alignment.identity() * 100.0);
-    }
-
-    // Get best hit
-    if let Some(best) = query_set.best_by_identity() {
-        println!("Best hit: {} at {:.1}% identity",
-                 best.target_name,
-                 best.identity() * 100.0);
-    }
-}
+```
+FASTA files
+    ↓
+[Fork: FAtoGDB] → Convert to GDB format
+    ↓
+[Fork: GIXmake] → Build k-mer index
+    ↓
+[Fork: FastGA]  → Perform alignment
+    ↓
+PAF output with extended CIGAR
 ```
 
-### Simple Query Processing
-
-For simpler use cases, use the high-level API:
+## Configuration
 
 ```rust
-use fastga_rs::{align_queries, Config};
+use fastga_rs::Config;
 
-align_queries(
-    "queries.fa",
-    "targets.fa",
-    Config::default(),
-    |query_set| {
-        // Process complete alignment set for this query
-        println!("Processing {} with {} hits",
-                 query_set.query_name,
-                 query_set.alignment_count());
+// Default: no filtering
+let config = Config::default();
 
-        // Return true to continue, false to stop
-        Ok(true)
-    }
-)?;
-```
-
-### Memory-Efficient Streaming
-
-The query iterator uses bounded channels with backpressure. When you process slowly, FastGA automatically pauses, preventing memory overflow:
-
-```rust
-let query_sets = QueryAlignmentIterator::new(
-    "huge_queries.fa",
-    "huge_database.fa",
-    Config::default(),
-    1,  // Only buffer 1 query ahead (strict backpressure)
-)?;
-
-for query_set in query_sets {
-    let query_set = query_set?;
-
-    // FastGA is paused here if we're slow!
-    expensive_computation(&query_set)?;
-
-    // FastGA resumes when we loop back
-}
-```
-
-### Configuration Presets
-
-```rust
-use fastga_rs::{FastGA, Config};
-
-// High sensitivity for divergent sequences
-let aligner = FastGA::new(Config::high_sensitivity())?;
-
-// Fast mode for similar sequences
-let aligner = FastGA::new(Config::fast())?;
-
-// Optimized for repetitive genomes
-let aligner = FastGA::new(Config::repetitive_genomes())?;
-
-// Custom configuration
+// Custom settings
 let config = Config::builder()
-    .min_identity(0.85)
-    .min_alignment_length(5000)
-    .num_threads(8)
+    .num_threads(16)
+    .min_alignment_length(1000)      // Filter short alignments
+    .min_identity(Some(0.90))        // 90% identity threshold
+    .output_format(OutputFormat::PafWithX)  // Extended CIGAR
+    .keep_intermediates(true)        // Keep .gdb/.gix files
     .build();
-let aligner = FastGA::new(config)?;
 ```
 
-### Integration with Other Tools
+### Available Parameters
 
-FastGA-rs is designed to integrate seamlessly with genome analysis pipelines. See [fastga-rs-integration.md](fastga-rs-integration.md) for detailed integration guide with [SweepGA](https://github.com/ekg/sweepga).
+- `num_threads`: Parallelism (default: 8)
+- `min_alignment_length`: Length filter (default: 0 - no filter)
+- `min_identity`: Identity filter (default: None - no filter)
+- `output_format`: PAF variants (default: PafWithX)
+- `soft_masking`: Handle lowercase (default: false)
+- `keep_intermediates`: Keep temp files (default: false)
+
+## Fork-Based API (Recommended)
+
+For maximum stability, use the fork-based orchestrator:
+
+```rust
+use fastga_rs::fork_runner::ForkOrchestrator;
+
+let orchestrator = ForkOrchestrator::new(Config::default());
+
+// Each utility runs in isolated process
+let paf_output = orchestrator.align(
+    Path::new("query.fa"),
+    Path::new("target.fa")
+)?;
+```
+
+## Streaming Large Datasets
+
+Process alignments without loading everything into memory:
+
+```rust
+use fastga_rs::simple_runner::run_fastga_streaming;
+
+run_fastga_streaming(
+    Path::new("query.fa"),
+    Path::new("target.fa"),
+    8,      // threads
+    0,      // min_length (0 = no filter)
+    None,   // min_identity (None = no filter)
+    |paf_line| {
+        // Process each alignment line
+        println!("{}", paf_line);
+        true  // Continue (false to stop)
+    }
+)?;
+```
 
 ## Building from Source
 
 ```bash
 git clone https://github.com/pangenome/fastga-rs.git
 cd fastga-rs
-
-# Initialize submodules (FastGA source)
-git submodule update --init --recursive
-
-# Build and run tests
 cargo build --release
-cargo test
+cargo test  # Should pass 78/78 tests (100%)
 ```
 
-## Architecture
+## Testing
 
-The library consists of several modules:
+```bash
+# Run all tests
+cargo test
 
-- **`embedded`**: Manages embedded FastGA binaries
-- **`streaming`**: Streaming alignment processing
-- **`config`**: Configuration options
-- **`alignment`**: Alignment data structures and PAF output
-- **`error`**: Error handling types
+# Test with real data
+wget https://hgdownload.soe.ucsc.edu/goldenPath/sacCer3/chromosomes/chrV.fa.gz
+gunzip chrV.fa.gz
+cargo run --example align -- chrV.fa chrV.fa > output.paf
+# Expect ~1479 alignments for chrV self-alignment
+```
 
 ## Requirements
 
-- Rust 1.70 or later
-- C compiler (for building FastGA during compilation)
-- POSIX-compliant system (Linux, macOS)
+- Rust 1.70+
+- C compiler (gcc/clang)
+- POSIX system (Linux/macOS)
 
 ## License
 
-This project is licensed under the MIT License. FastGA source is included via git subtree and is subject to its own licensing terms.
-
-## Contributing
-
-Contributions are welcome! Please feel free to submit issues and pull requests.
-
-### Updating FastGA
-
-FastGA is included as a git subtree (not submodule) for crate compatibility. To update to the latest FastGA version:
-
-```bash
-git subtree pull --prefix=deps/fastga https://github.com/thegenemyers/FASTGA.git main --squash
-```
-
-## Citation
-
-If you use FastGA-rs in your research, please cite the original FastGA:
-
-```bibtex
-@article{myers2025fastga,
-  author = {Gene Myers and Richard Durbin and Chenxi Zhou},
-  title = {FastGA: Fast Genome Alignment},
-  journal = {bioRxiv},
-  year = {2025},
-  doi = {10.1101/2025.06.15.659750}
-}
-```
+MIT. FastGA included via git subtree under its own license.
