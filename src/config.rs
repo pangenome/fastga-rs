@@ -146,7 +146,7 @@ impl ConfigBuilder {
     /// Default: None (no identity filtering)
     pub fn min_identity(mut self, identity: f64) -> Self {
         assert!(
-            identity >= 0.0 && identity <= 1.0,
+            (0.0..=1.0).contains(&identity),
             "Identity must be between 0.0 and 1.0"
         );
         self.config.min_identity = Some(identity);

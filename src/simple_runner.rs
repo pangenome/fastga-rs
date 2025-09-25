@@ -22,16 +22,14 @@ fn find_fastga_binary() -> Result<PathBuf> {
 
             for base_dir in search_dirs {
                 if base_dir.exists() {
-                    for entry in std::fs::read_dir(&base_dir).unwrap_or_else(|_| std::fs::read_dir(".").unwrap()) {
-                        if let Ok(entry) = entry {
-                            let name = entry.file_name();
-                            let name_str = name.to_string_lossy();
-                            if name_str.starts_with("fastga-rs-") {
-                                let fastga = entry.path().join("out/FastGA");
-                                if fastga.exists() {
-                                    eprintln!("[FastGA] Using binary from build: {:?}", fastga);
-                                    return Ok(fastga);
-                                }
+                    for entry in std::fs::read_dir(&base_dir).unwrap_or_else(|_| std::fs::read_dir(".").unwrap()).flatten() {
+                        let name = entry.file_name();
+                        let name_str = name.to_string_lossy();
+                        if name_str.starts_with("fastga-rs-") {
+                            let fastga = entry.path().join("out/FastGA");
+                            if fastga.exists() {
+                                eprintln!("[FastGA] Using binary from build: {fastga:?}");
+                                return Ok(fastga);
                             }
                         }
                     }
@@ -44,7 +42,7 @@ fn find_fastga_binary() -> Result<PathBuf> {
     if let Ok(out_dir) = std::env::var("OUT_DIR") {
         let path = PathBuf::from(&out_dir).join("FastGA");
         if path.exists() {
-            eprintln!("[FastGA] Using binary from OUT_DIR: {:?}", path);
+            eprintln!("[FastGA] Using binary from OUT_DIR: {path:?}");
             return Ok(path);
         }
     }
@@ -57,16 +55,14 @@ fn find_fastga_binary() -> Result<PathBuf> {
     let pattern = base.join("target/debug/build");
     if pattern.exists() {
         if let Ok(entries) = std::fs::read_dir(&pattern) {
-            for entry in entries {
-                if let Ok(entry) = entry {
-                    let name = entry.file_name();
-                    let name_str = name.to_string_lossy();
-                    if name_str.starts_with("fastga-rs-") {
-                        let fastga = entry.path().join("out/FastGA");
-                        if fastga.exists() {
-                            eprintln!("[FastGA] Using binary from debug build: {:?}", fastga);
-                            return Ok(fastga);
-                        }
+            for entry in entries.flatten() {
+                let name = entry.file_name();
+                let name_str = name.to_string_lossy();
+                if name_str.starts_with("fastga-rs-") {
+                    let fastga = entry.path().join("out/FastGA");
+                    if fastga.exists() {
+                        eprintln!("[FastGA] Using binary from debug build: {fastga:?}");
+                        return Ok(fastga);
                     }
                 }
             }
@@ -77,16 +73,14 @@ fn find_fastga_binary() -> Result<PathBuf> {
     let pattern = base.join("target/release/build");
     if pattern.exists() {
         if let Ok(entries) = std::fs::read_dir(&pattern) {
-            for entry in entries {
-                if let Ok(entry) = entry {
-                    let name = entry.file_name();
-                    let name_str = name.to_string_lossy();
-                    if name_str.starts_with("fastga-rs-") {
-                        let fastga = entry.path().join("out/FastGA");
-                        if fastga.exists() {
-                            eprintln!("[FastGA] Using binary from release build: {:?}", fastga);
-                            return Ok(fastga);
-                        }
+            for entry in entries.flatten() {
+                let name = entry.file_name();
+                let name_str = name.to_string_lossy();
+                if name_str.starts_with("fastga-rs-") {
+                    let fastga = entry.path().join("out/FastGA");
+                    if fastga.exists() {
+                        eprintln!("[FastGA] Using binary from release build: {fastga:?}");
+                        return Ok(fastga);
                     }
                 }
             }
@@ -110,16 +104,16 @@ pub fn run_fastga_simple(
     let bin_dir = fastga_path.parent()
         .ok_or_else(|| FastGAError::Other("Invalid FastGA path".to_string()))?;
 
-    eprintln!("[FastGA] Binary directory: {:?}", bin_dir);
+    eprintln!("[FastGA] Binary directory: {bin_dir:?}");
     eprintln!("[FastGA] Checking for utilities...");
 
     // Check for required utilities
     for utility in &["FAtoGDB", "GIXmake"] {
         let util_path = bin_dir.join(utility);
         if !util_path.exists() {
-            return Err(FastGAError::Other(format!("Required utility {} not found in {:?}", utility, bin_dir)));
+            return Err(FastGAError::Other(format!("Required utility {utility} not found in {bin_dir:?}")));
         }
-        eprintln!("[FastGA] Found utility: {:?}", util_path);
+        eprintln!("[FastGA] Found utility: {util_path:?}");
     }
 
     // Build command
@@ -127,11 +121,11 @@ pub fn run_fastga_simple(
 
     // Add arguments
     cmd.arg("-pafx"); // PAF with extended CIGAR
-    cmd.arg(format!("-T{}", num_threads));
-    cmd.arg(format!("-l{}", min_length));
+    cmd.arg(format!("-T{num_threads}"));
+    cmd.arg(format!("-l{min_length}"));
 
     if let Some(identity) = min_identity {
-        cmd.arg(format!("-i{:.2}", identity));
+        cmd.arg(format!("-i{identity:.2}"));
     }
 
     cmd.arg(query_path);
@@ -142,18 +136,18 @@ pub fn run_fastga_simple(
     let new_path = format!("{}:{}", bin_dir.display(), current_path);
     cmd.env("PATH", new_path);
 
-    eprintln!("[FastGA] Running command: {:?}", cmd);
+    eprintln!("[FastGA] Running command: {cmd:?}");
 
     // Execute and capture output
     let output = cmd
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .output()
-        .map_err(|e| FastGAError::Other(format!("Failed to execute FastGA: {}", e)))?;
+        .map_err(|e| FastGAError::Other(format!("Failed to execute FastGA: {e}")))?;
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
-        eprintln!("[FastGA] Command failed with stderr: {}", stderr);
+        eprintln!("[FastGA] Command failed with stderr: {stderr}");
         return Err(FastGAError::FastGAExecutionFailed(stderr.to_string()));
     }
 
@@ -179,11 +173,11 @@ where
     let mut cmd = Command::new(&fastga_path);
 
     cmd.arg("-pafx");
-    cmd.arg(format!("-T{}", num_threads));
-    cmd.arg(format!("-l{}", min_length));
+    cmd.arg(format!("-T{num_threads}"));
+    cmd.arg(format!("-l{min_length}"));
 
     if let Some(identity) = min_identity {
-        cmd.arg(format!("-i{:.2}", identity));
+        cmd.arg(format!("-i{identity:.2}"));
     }
 
     cmd.arg(query_path);
@@ -197,7 +191,7 @@ where
         .stdout(Stdio::piped())
         .stderr(Stdio::null())
         .spawn()
-        .map_err(|e| FastGAError::Other(format!("Failed to spawn FastGA: {}", e)))?;
+        .map_err(|e| FastGAError::Other(format!("Failed to spawn FastGA: {e}")))?;
 
     let stdout = child.stdout.take()
         .ok_or_else(|| FastGAError::Other("Failed to capture stdout".to_string()))?;
@@ -205,7 +199,7 @@ where
     let reader = BufReader::new(stdout);
 
     for line in reader.lines() {
-        let line = line.map_err(|e| FastGAError::IoError(e))?;
+        let line = line.map_err(FastGAError::IoError)?;
         if !callback(&line) {
             // Kill the process if callback returns false
             let _ = child.kill();
@@ -214,11 +208,11 @@ where
     }
 
     let status = child.wait()
-        .map_err(|e| FastGAError::Other(format!("Failed to wait for FastGA: {}", e)))?;
+        .map_err(|e| FastGAError::Other(format!("Failed to wait for FastGA: {e}")))?;
 
     if !status.success() {
         return Err(FastGAError::FastGAExecutionFailed(
-            format!("FastGA exited with status: {}", status)
+            format!("FastGA exited with status: {status}")
         ));
     }
 

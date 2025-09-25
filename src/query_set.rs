@@ -137,7 +137,7 @@ impl QueryAlignmentIterator {
                 let alignment = match parse_paf_line(&line) {
                     Ok(a) => a,
                     Err(e) => {
-                        eprintln!("Warning: Failed to parse PAF line: {}", e);
+                        eprintln!("Warning: Failed to parse PAF line: {e}");
                         continue;
                     }
                 };

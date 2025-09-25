@@ -5,7 +5,7 @@
 
 use crate::error::{FastGAError, Result};
 use std::ffi::CString;
-use std::os::raw::{c_char, c_int, c_void};
+use std::os::raw::{c_char, c_int};
 use std::path::Path;
 
 // FFI bindings to the actual worker functions in FastGA's C code
@@ -32,6 +32,12 @@ pub struct FastGAOrchestrator {
     pub temp_dir: String,
 }
 
+impl Default for FastGAOrchestrator {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl FastGAOrchestrator {
     pub fn new() -> Self {
         Self {
@@ -46,14 +52,14 @@ impl FastGAOrchestrator {
     /// Main alignment function - orchestrates the entire process
     pub fn align(&self, query_path: &Path, target_path: &Path) -> Result<Vec<u8>> {
         eprintln!("[FastGA] Starting alignment process...");
-        eprintln!("[FastGA] Query: {:?}", query_path);
-        eprintln!("[FastGA] Target: {:?}", target_path);
+        eprintln!("[FastGA] Query: {query_path:?}");
+        eprintln!("[FastGA] Target: {target_path:?}");
         // Step 1: Convert FASTA files to GDB format if needed
         eprintln!("[FastGA] Step 1: Converting FASTA to GDB format...");
         let query_gdb = self.prepare_gdb(query_path)?;
-        eprintln!("[FastGA] Query GDB created: {}", query_gdb);
+        eprintln!("[FastGA] Query GDB created: {query_gdb}");
         let target_gdb = self.prepare_gdb(target_path)?;
-        eprintln!("[FastGA] Target GDB created: {}", target_gdb);
+        eprintln!("[FastGA] Target GDB created: {target_gdb}");
 
         // Step 2: Create k-mer indices if needed
         eprintln!("[FastGA] Step 2: Creating k-mer indices...");
@@ -76,7 +82,7 @@ impl FastGAOrchestrator {
 
     /// Convert FASTA to GDB format using FAtoGDB
     fn prepare_gdb(&self, fasta_path: &Path) -> Result<String> {
-        eprintln!("[FastGA] prepare_gdb: Converting {:?} to GDB", fasta_path);
+        eprintln!("[FastGA] prepare_gdb: Converting {fasta_path:?} to GDB");
         let gdb_path = fasta_path.with_extension("gdb");
 
         // Check if GDB already exists and is up-to-date
@@ -94,21 +100,18 @@ impl FastGAOrchestrator {
         }
 
         // Call FAtoGDB directly via FFI
-        let args = vec![
-            CString::new("FAtoGDB").unwrap(),
-            CString::new(fasta_path.to_string_lossy().to_string()).unwrap(),
-        ];
+        let args = [CString::new("FAtoGDB").unwrap(),
+            CString::new(fasta_path.to_string_lossy().to_string()).unwrap()];
 
         let argv: Vec<*const c_char> = args.iter().map(|s| s.as_ptr()).collect();
 
         eprintln!("[FastGA] Calling fatogdb_main with args: {:?}", args.iter().map(|s| s.to_str().unwrap()).collect::<Vec<_>>());
         let result = unsafe { fatogdb_main(argv.len() as c_int, argv.as_ptr()) };
-        eprintln!("[FastGA] fatogdb_main returned: {}", result);
+        eprintln!("[FastGA] fatogdb_main returned: {result}");
 
         if result != 0 {
             return Err(FastGAError::Other(format!(
-                "FAtoGDB failed with code {}",
-                result
+                "FAtoGDB failed with code {result}"
             )));
         }
 
@@ -117,7 +120,7 @@ impl FastGAOrchestrator {
 
     /// Create k-mer index using GIXmake
     fn create_index(&self, gdb_path: &str, freq: i32) -> Result<()> {
-        eprintln!("[FastGA] create_index: Creating index for {}", gdb_path);
+        eprintln!("[FastGA] create_index: Creating index for {gdb_path}");
         let gix_path = gdb_path.replace(".gdb", ".gix");
 
         // Check if index already exists
@@ -127,24 +130,21 @@ impl FastGAOrchestrator {
         }
 
         // Call GIXmake directly via FFI
-        let args = vec![
-            CString::new("GIXmake").unwrap(),
+        let args = [CString::new("GIXmake").unwrap(),
             CString::new(format!("-T{}", self.num_threads)).unwrap(),
             CString::new(format!("-P{}", self.temp_dir)).unwrap(),
-            CString::new(format!("-f{}", freq)).unwrap(),
-            CString::new(gdb_path).unwrap(),
-        ];
+            CString::new(format!("-f{freq}")).unwrap(),
+            CString::new(gdb_path).unwrap()];
 
         let argv: Vec<*const c_char> = args.iter().map(|s| s.as_ptr()).collect();
 
         eprintln!("[FastGA] Calling gixmake_main with args: {:?}", args.iter().map(|s| s.to_str().unwrap()).collect::<Vec<_>>());
         let result = unsafe { gixmake_main(argv.len() as c_int, argv.as_ptr()) };
-        eprintln!("[FastGA] gixmake_main returned: {}", result);
+        eprintln!("[FastGA] gixmake_main returned: {result}");
 
         if result != 0 {
             return Err(FastGAError::Other(format!(
-                "GIXmake failed with code {}",
-                result
+                "GIXmake failed with code {result}"
             )));
         }
 
@@ -153,7 +153,7 @@ impl FastGAOrchestrator {
 
     /// Run the actual alignment algorithm
     fn run_alignment(&self, query_gdb: &str, target_gdb: &str) -> Result<Vec<u8>> {
-        eprintln!("[FastGA] run_alignment: Aligning {} vs {}", query_gdb, target_gdb);
+        eprintln!("[FastGA] run_alignment: Aligning {query_gdb} vs {target_gdb}");
         // This is where we'd call the core alignment functions from FastGA
         // For now, we'll still use the wrapped main function, but ideally
         // we'd extract and call the actual alignment logic directly
@@ -162,7 +162,7 @@ impl FastGAOrchestrator {
 
         // Create pipe to capture output
         let (read_fd, write_fd) = nix::unistd::pipe()
-            .map_err(|e| FastGAError::Other(format!("Failed to create pipe: {}", e)))?;
+            .map_err(|e| FastGAError::Other(format!("Failed to create pipe: {e}")))?;
 
         // Save original stdout
         let original_stdout = unsafe { libc::dup(1) };
@@ -175,15 +175,13 @@ impl FastGAOrchestrator {
 
         // Build arguments for the core alignment
         // We're calling the main function but with GDB files already prepared
-        let args = vec![
-            CString::new("FastGA").unwrap(),
+        let args = [CString::new("FastGA").unwrap(),
             CString::new("-pafx").unwrap(),
             CString::new(format!("-T{}", self.num_threads)).unwrap(),
             CString::new(format!("-l{}", self.min_length)).unwrap(),
             CString::new(format!("-i{:.2}", self.min_identity)).unwrap(),
             CString::new(query_gdb).unwrap(),
-            CString::new(target_gdb).unwrap(),
-        ];
+            CString::new(target_gdb).unwrap()];
 
         let argv: Vec<*const c_char> = args.iter().map(|s| s.as_ptr()).collect();
 
@@ -195,7 +193,7 @@ impl FastGAOrchestrator {
 
         eprintln!("[FastGA] Calling fastga_main with args: {:?}", args.iter().map(|s| s.to_str().unwrap()).collect::<Vec<_>>());
         let result = unsafe { fastga_main(argv.len() as c_int, argv.as_ptr()) };
-        eprintln!("[FastGA] fastga_main returned: {}", result);
+        eprintln!("[FastGA] fastga_main returned: {result}");
 
         // Restore stdout
         unsafe {
@@ -205,8 +203,7 @@ impl FastGAOrchestrator {
 
         if result != 0 {
             return Err(FastGAError::Other(format!(
-                "Alignment failed with code {}",
-                result
+                "Alignment failed with code {result}"
             )));
         }
 
@@ -214,7 +211,7 @@ impl FastGAOrchestrator {
         let mut output = Vec::new();
         let mut pipe_file = unsafe { std::fs::File::from_raw_fd(read_fd) };
         std::io::Read::read_to_end(&mut pipe_file, &mut output)
-            .map_err(|e| FastGAError::IoError(e))?;
+            .map_err(FastGAError::IoError)?;
 
         Ok(output)
     }

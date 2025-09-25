@@ -113,7 +113,7 @@ fn main() {
         let src = fastga_dir.join(utility);
         let dst = out_dir.join(utility);
         if src.exists() {
-            std::fs::copy(&src, &dst).expect(&format!("Failed to copy {} to OUT_DIR", utility));
+            std::fs::copy(&src, &dst).unwrap_or_else(|_| panic!("Failed to copy {utility} to OUT_DIR"));
 
             // Make executable
             #[cfg(unix)]

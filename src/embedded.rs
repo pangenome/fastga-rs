@@ -48,8 +48,7 @@ pub fn get_binary_path(binary_name: &str) -> Result<PathBuf> {
     }
 
     Err(FastGAError::Other(format!(
-        "FastGA binary '{}' not found. Please run 'cargo build' first.",
-        binary_name
+        "FastGA binary '{binary_name}' not found. Please run 'cargo build' first."
     )))
 }
 
@@ -77,7 +76,7 @@ impl FastGABinaries {
         let output = Command::new(&self.fastga_path)
             .args(args)
             .output()
-            .map_err(|e| FastGAError::Other(format!("Failed to run FastGA: {}", e)))?;
+            .map_err(|e| FastGAError::Other(format!("Failed to run FastGA: {e}")))?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
@@ -99,7 +98,7 @@ impl FastGABinaries {
             .stdout(Stdio::piped())
             .stderr(Stdio::null())
             .spawn()
-            .map_err(|e| FastGAError::Other(format!("Failed to spawn FastGA: {}", e)))?;
+            .map_err(|e| FastGAError::Other(format!("Failed to spawn FastGA: {e}")))?;
 
         let stdout = child
             .stdout
@@ -109,7 +108,7 @@ impl FastGABinaries {
         let reader = BufReader::new(stdout);
 
         for line in reader.lines() {
-            let line = line.map_err(|e| FastGAError::IoError(e))?;
+            let line = line.map_err(FastGAError::IoError)?;
             if !callback(&line) {
                 break;
             }
@@ -117,12 +116,11 @@ impl FastGABinaries {
 
         let status = child
             .wait()
-            .map_err(|e| FastGAError::Other(format!("Failed to wait for FastGA: {}", e)))?;
+            .map_err(|e| FastGAError::Other(format!("Failed to wait for FastGA: {e}")))?;
 
         if !status.success() {
             return Err(FastGAError::FastGAExecutionFailed(format!(
-                "FastGA exited with status: {}",
-                status
+                "FastGA exited with status: {status}"
             )));
         }
 
@@ -137,7 +135,7 @@ pub fn run_fastga(args: &[&str]) -> Result<String> {
     let output = Command::new(&fastga_path)
         .args(args)
         .output()
-        .map_err(|e| FastGAError::Other(format!("Failed to run FastGA: {}", e)))?;
+        .map_err(|e| FastGAError::Other(format!("Failed to run FastGA: {e}")))?;
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
@@ -161,7 +159,7 @@ where
         .stdout(Stdio::piped())
         .stderr(Stdio::null())
         .spawn()
-        .map_err(|e| FastGAError::Other(format!("Failed to spawn FastGA: {}", e)))?;
+        .map_err(|e| FastGAError::Other(format!("Failed to spawn FastGA: {e}")))?;
 
     let stdout = child
         .stdout
@@ -171,7 +169,7 @@ where
     let reader = BufReader::new(stdout);
 
     for line in reader.lines() {
-        let line = line.map_err(|e| FastGAError::IoError(e))?;
+        let line = line.map_err(FastGAError::IoError)?;
         if !callback(&line) {
             break;
         }
@@ -179,12 +177,11 @@ where
 
     let status = child
         .wait()
-        .map_err(|e| FastGAError::Other(format!("Failed to wait for FastGA: {}", e)))?;
+        .map_err(|e| FastGAError::Other(format!("Failed to wait for FastGA: {e}")))?;
 
     if !status.success() {
         return Err(FastGAError::FastGAExecutionFailed(format!(
-            "FastGA exited with status: {}",
-            status
+            "FastGA exited with status: {status}"
         )));
     }
 

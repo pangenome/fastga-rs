@@ -1,7 +1,7 @@
 //! Timeout support for FastGA alignment operations
 
 use crate::error::{Result, FastGAError};
-use crate::{Alignment, Alignments, Config, FastGA};
+use crate::{Alignments, Config, FastGA};
 use std::path::Path;
 use std::sync::mpsc;
 use std::thread;
@@ -103,7 +103,7 @@ impl TimeoutAligner {
                     );
                 }
                 Err(e) => {
-                    callback("error", &format!("Alignment failed: {}", e));
+                    callback("error", &format!("Alignment failed: {e}"));
                 }
             }
         }

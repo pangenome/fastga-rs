@@ -333,6 +333,12 @@ pub struct BestHitFilter {
     best_hits: HashMap<String, Alignment>,
 }
 
+impl Default for BestHitFilter {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl BestHitFilter {
     /// Creates a new best hit filter.
     pub fn new() -> Self {

@@ -33,7 +33,7 @@ impl AlignmentPipeline {
         if let Some(ref callback) = self.progress {
             callback(stage, message);
         }
-        eprintln!("[Pipeline] {}: {}", stage, message);
+        eprintln!("[Pipeline] {stage}: {message}");
     }
 
     /// Step 1: Validate input files
@@ -53,7 +53,7 @@ impl AlignmentPipeline {
 
         self.report_progress(
             "validate",
-            &format!("Query: {} bytes, Target: {} bytes", query_size, target_size),
+            &format!("Query: {query_size} bytes, Target: {target_size} bytes"),
         );
 
         if query_size == 0 || target_size == 0 {
@@ -65,7 +65,7 @@ impl AlignmentPipeline {
 
     /// Step 2: Prepare database files (.gdb format)
     pub fn prepare_database(&self, fasta_path: &Path) -> Result<PathBuf> {
-        self.report_progress("database", &format!("Preparing database for {:?}", fasta_path));
+        self.report_progress("database", &format!("Preparing database for {fasta_path:?}"));
 
         // Find FAtoGDB binary
         let fatogdb = self.find_utility("FAtoGDB")?;
@@ -92,20 +92,20 @@ impl AlignmentPipeline {
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(FastGAError::Other(format!("FAtoGDB failed: {}", stderr)));
+            return Err(FastGAError::Other(format!("FAtoGDB failed: {stderr}")));
         }
 
         if !gdb_path.exists() {
             return Err(FastGAError::Other("GDB file was not created".to_string()));
         }
 
-        self.report_progress("database", &format!("Database created: {:?}", gdb_path));
+        self.report_progress("database", &format!("Database created: {gdb_path:?}"));
         Ok(gdb_path)
     }
 
     /// Step 3: Create k-mer index
     pub fn create_index(&self, gdb_path: &Path) -> Result<PathBuf> {
-        self.report_progress("index", &format!("Creating index for {:?}", gdb_path));
+        self.report_progress("index", &format!("Creating index for {gdb_path:?}"));
 
         let gixmake = self.find_utility("GIXmake")?;
         let gix_path = gdb_path.with_extension("gix");
@@ -126,10 +126,10 @@ impl AlignmentPipeline {
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(FastGAError::Other(format!("GIXmake failed: {}", stderr)));
+            return Err(FastGAError::Other(format!("GIXmake failed: {stderr}")));
         }
 
-        self.report_progress("index", &format!("Index created: {:?}", gix_path));
+        self.report_progress("index", &format!("Index created: {gix_path:?}"));
         Ok(gix_path)
     }
 
@@ -145,7 +145,7 @@ impl AlignmentPipeline {
             .arg(format!("-l{}", self.config.min_alignment_length));
 
         if let Some(identity) = self.config.min_identity {
-            cmd.arg(format!("-i{:.2}", identity));
+            cmd.arg(format!("-i{identity:.2}"));
         }
 
         // FastGA expects the original FASTA paths, not the GDB paths
@@ -155,7 +155,7 @@ impl AlignmentPipeline {
 
         cmd.arg(&query_fasta).arg(&target_fasta);
 
-        self.report_progress("align", &format!("Running command: {:?}", cmd));
+        self.report_progress("align", &format!("Running command: {cmd:?}"));
 
         let output = cmd.output()?;
 
@@ -214,12 +214,12 @@ impl AlignmentPipeline {
 
         for location in locations.into_iter().flatten() {
             if location.exists() {
-                self.report_progress("find", &format!("Found {} at {:?}", name, location));
+                self.report_progress("find", &format!("Found {name} at {location:?}"));
                 return Ok(location);
             }
         }
 
-        Err(FastGAError::Other(format!("{} utility not found", name)))
+        Err(FastGAError::Other(format!("{name} utility not found")))
     }
 
     /// Full pipeline: validate, prepare, index, and align

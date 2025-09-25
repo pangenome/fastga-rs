@@ -1,7 +1,7 @@
 //! Fork/exec runner for FastGA utilities
 //! This runs each utility in a separate forked process to avoid memory/state issues
 
-use std::ffi::{CString, c_void};
+use std::ffi::CString;
 use std::os::raw::{c_char, c_int};
 use std::path::{Path, PathBuf};
 use crate::error::{Result, FastGAError};
@@ -9,13 +9,11 @@ use nix::unistd::{fork, ForkResult};
 use nix::sys::wait::{waitpid, WaitStatus};
 use std::process::exit;
 
-// Link to our wrapper library
-#[link(name = "fastga_wrappers", kind = "static")]
+// Link required libraries
 #[link(name = "z")]
 #[link(name = "m")]
 extern "C" {
-    fn fatogdb_wrapper(input_path: *const c_char) -> c_int;
-    fn gixmake_wrapper(gdb_path: *const c_char, threads: c_int, temp_dir: *const c_char, freq: c_int) -> c_int;
+    // Wrappers were not implemented, using main functions directly
 }
 
 // Also link to the renamed main functions
@@ -42,22 +40,22 @@ pub fn fork_fatogdb(input_path: &Path) -> Result<PathBuf> {
     match unsafe { fork() } {
         Ok(ForkResult::Parent { child }) => {
             // Parent process - wait for child
-            eprintln!("[Fork] Parent waiting for FAtoGDB child process {}", child);
+            eprintln!("[Fork] Parent waiting for FAtoGDB child process {child}");
 
             match waitpid(child, None) {
                 Ok(WaitStatus::Exited(_, code)) => {
-                    eprintln!("[Fork] FAtoGDB exited with code {}", code);
+                    eprintln!("[Fork] FAtoGDB exited with code {code}");
                     if code == 0 && gdb_path.exists() {
                         Ok(gdb_path)
                     } else {
-                        Err(FastGAError::Other(format!("FAtoGDB failed with code {}", code)))
+                        Err(FastGAError::Other(format!("FAtoGDB failed with code {code}")))
                     }
                 }
                 Ok(status) => {
-                    Err(FastGAError::Other(format!("FAtoGDB unexpected status: {:?}", status)))
+                    Err(FastGAError::Other(format!("FAtoGDB unexpected status: {status:?}")))
                 }
                 Err(e) => {
-                    Err(FastGAError::Other(format!("Failed to wait for FAtoGDB: {}", e)))
+                    Err(FastGAError::Other(format!("Failed to wait for FAtoGDB: {e}")))
                 }
             }
         }
@@ -66,10 +64,8 @@ pub fn fork_fatogdb(input_path: &Path) -> Result<PathBuf> {
             eprintln!("[Fork] Child process running FAtoGDB");
 
             // Use fatogdb_main directly (wrapper not implemented)
-            let args = vec![
-                CString::new("FAtoGDB").unwrap(),
-                CString::new(input_path.to_string_lossy().to_string()).unwrap(),
-            ];
+            let args = [CString::new("FAtoGDB").unwrap(),
+                CString::new(input_path.to_string_lossy().to_string()).unwrap()];
 
             let argv: Vec<*const c_char> = args.iter().map(|s| s.as_ptr()).collect();
 
@@ -80,7 +76,7 @@ pub fn fork_fatogdb(input_path: &Path) -> Result<PathBuf> {
             exit(result);
         }
         Err(e) => {
-            Err(FastGAError::Other(format!("Failed to fork for FAtoGDB: {}", e)))
+            Err(FastGAError::Other(format!("Failed to fork for FAtoGDB: {e}")))
         }
     }
 }
@@ -99,22 +95,22 @@ pub fn fork_gixmake(gdb_path: &Path, threads: i32, freq: i32) -> Result<PathBuf>
 
     match unsafe { fork() } {
         Ok(ForkResult::Parent { child }) => {
-            eprintln!("[Fork] Parent waiting for GIXmake child process {}", child);
+            eprintln!("[Fork] Parent waiting for GIXmake child process {child}");
 
             match waitpid(child, None) {
                 Ok(WaitStatus::Exited(_, code)) => {
-                    eprintln!("[Fork] GIXmake exited with code {}", code);
+                    eprintln!("[Fork] GIXmake exited with code {code}");
                     if code == 0 && gix_path.exists() {
                         Ok(gix_path)
                     } else {
-                        Err(FastGAError::Other(format!("GIXmake failed with code {}", code)))
+                        Err(FastGAError::Other(format!("GIXmake failed with code {code}")))
                     }
                 }
                 Ok(status) => {
-                    Err(FastGAError::Other(format!("GIXmake unexpected status: {:?}", status)))
+                    Err(FastGAError::Other(format!("GIXmake unexpected status: {status:?}")))
                 }
                 Err(e) => {
-                    Err(FastGAError::Other(format!("Failed to wait for GIXmake: {}", e)))
+                    Err(FastGAError::Other(format!("Failed to wait for GIXmake: {e}")))
                 }
             }
         }
@@ -122,12 +118,10 @@ pub fn fork_gixmake(gdb_path: &Path, threads: i32, freq: i32) -> Result<PathBuf>
             eprintln!("[Fork] Child process running GIXmake");
 
             // Use gixmake_main directly since wrapper isn't implemented
-            let args = vec![
-                CString::new("GIXmake").unwrap(),
-                CString::new(format!("-T{}", threads)).unwrap(),
-                CString::new(format!("-f{}", freq)).unwrap(),
-                CString::new(base_name.to_string_lossy().to_string()).unwrap(),
-            ];
+            let args = [CString::new("GIXmake").unwrap(),
+                CString::new(format!("-T{threads}")).unwrap(),
+                CString::new(format!("-f{freq}")).unwrap(),
+                CString::new(base_name.to_string_lossy().to_string()).unwrap()];
 
             let argv: Vec<*const c_char> = args.iter().map(|s| s.as_ptr()).collect();
 
@@ -138,7 +132,7 @@ pub fn fork_gixmake(gdb_path: &Path, threads: i32, freq: i32) -> Result<PathBuf>
             exit(result);
         }
         Err(e) => {
-            Err(FastGAError::Other(format!("Failed to fork for GIXmake: {}", e)))
+            Err(FastGAError::Other(format!("Failed to fork for GIXmake: {e}")))
         }
     }
 }
@@ -206,22 +200,22 @@ impl ForkOrchestrator {
         }
 
         if let Some(identity) = self.config.min_identity {
-            cmd.arg(format!("-i{:.2}", identity));
+            cmd.arg(format!("-i{identity:.2}"));
         }
 
         // Advanced parameters
         if let Some(cutoff) = self.config.adaptive_seed_cutoff {
-            cmd.arg(format!("-f{}", cutoff));
+            cmd.arg(format!("-f{cutoff}"));
         }
 
         if let Some(coverage) = self.config.min_chain_coverage {
             // FastGA expects -c as an integer percentage (0-100)
             let coverage_pct = (coverage * 100.0) as i32;
-            cmd.arg(format!("-c{}", coverage_pct));
+            cmd.arg(format!("-c{coverage_pct}"));
         }
 
         if let Some(threshold) = self.config.chain_start_threshold {
-            cmd.arg(format!("-s{}", threshold));
+            cmd.arg(format!("-s{threshold}"));
         }
 
         // Flags
@@ -257,10 +251,10 @@ impl ForkOrchestrator {
         cmd.arg(query_path)
            .arg(target_path);
 
-        eprintln!("[Fork] Running FastGA: {:?}", cmd);
+        eprintln!("[Fork] Running FastGA: {cmd:?}");
 
         let output = cmd.output()
-            .map_err(|e| FastGAError::Other(format!("Failed to run FastGA: {}", e)))?;
+            .map_err(|e| FastGAError::Other(format!("Failed to run FastGA: {e}")))?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
@@ -287,20 +281,20 @@ impl ForkOrchestrator {
             }
 
             if let Some(identity) = self.config.min_identity {
-                cmd2.arg(format!("-i{:.2}", identity));
+                cmd2.arg(format!("-i{identity:.2}"));
             }
 
             // Add all other parameters (same as above)
             if let Some(cutoff) = self.config.adaptive_seed_cutoff {
-                cmd2.arg(format!("-f{}", cutoff));
+                cmd2.arg(format!("-f{cutoff}"));
             }
             if let Some(coverage) = self.config.min_chain_coverage {
                 // FastGA expects -c as an integer percentage (0-100)
                 let coverage_pct = (coverage * 100.0) as i32;
-                cmd2.arg(format!("-c{}", coverage_pct));
+                cmd2.arg(format!("-c{coverage_pct}"));
             }
             if let Some(threshold) = self.config.chain_start_threshold {
-                cmd2.arg(format!("-s{}", threshold));
+                cmd2.arg(format!("-s{threshold}"));
             }
             if self.config.verbose { cmd2.arg("-v"); }
             if self.config.keep_intermediates { cmd2.arg("-k"); }
@@ -317,7 +311,7 @@ impl ForkOrchestrator {
                 .arg(target_path);
 
             let output2 = cmd2.output()
-                .map_err(|e| FastGAError::Other(format!("Failed to run FastGA: {}", e)))?;
+                .map_err(|e| FastGAError::Other(format!("Failed to run FastGA: {e}")))?;
 
             if !output2.status.success() {
                 return Err(FastGAError::Other(format!("FastGA failed: {}",
@@ -359,7 +353,7 @@ fn find_fastga_binary() -> Result<PathBuf> {
 
     // Try target directories
     for profile in &["debug", "release"] {
-        let build_dir = PathBuf::from(format!("target/{}/build", profile));
+        let build_dir = PathBuf::from(format!("target/{profile}/build"));
         if let Ok(entries) = std::fs::read_dir(&build_dir) {
             for entry in entries.flatten() {
                 if entry.file_name().to_string_lossy().starts_with("fastga-rs-") {

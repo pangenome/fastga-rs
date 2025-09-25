@@ -2,9 +2,7 @@
 
 use crate::error::{FastGAError, Result};
 use std::ffi::CString;
-use std::io::Read;
-use std::os::raw::{c_char, c_int, c_void};
-use std::os::unix::io::FromRawFd;
+use std::os::raw::{c_char, c_int};
 use std::path::Path;
 
 // Link to the FastGA static libraries built by build.rs
@@ -49,14 +47,12 @@ fn find_fastga_bin_dir() -> String {
             if build_dir.exists() {
                 // Find fastga-rs-* directory
                 if let Ok(entries) = std::fs::read_dir(&build_dir) {
-                    for entry in entries {
-                        if let Ok(entry) = entry {
-                            let name = entry.file_name();
-                            if name.to_string_lossy().starts_with("fastga-rs-") {
-                                let out_dir = entry.path().join("out");
-                                if out_dir.exists() && out_dir.join("FAtoGDB").exists() {
-                                    return out_dir.to_string_lossy().to_string();
-                                }
+                    for entry in entries.flatten() {
+                        let name = entry.file_name();
+                        if name.to_string_lossy().starts_with("fastga-rs-") {
+                            let out_dir = entry.path().join("out");
+                            if out_dir.exists() && out_dir.join("FAtoGDB").exists() {
+                                return out_dir.to_string_lossy().to_string();
                             }
                         }
                     }
@@ -81,12 +77,12 @@ pub fn run_fastga_alignment(
     let mut args = vec![
         CString::new("FastGA").unwrap(),
         CString::new("-pafx").unwrap(), // PAF with extended CIGAR
-        CString::new(format!("-T{}", num_threads)).unwrap(),
-        CString::new(format!("-l{}", min_length)).unwrap(),
+        CString::new(format!("-T{num_threads}")).unwrap(),
+        CString::new(format!("-l{min_length}")).unwrap(),
     ];
 
     if min_identity > 0.0 {
-        args.push(CString::new(format!("-i{:.2}", min_identity)).unwrap());
+        args.push(CString::new(format!("-i{min_identity:.2}")).unwrap());
     }
 
     // Add file paths
@@ -110,7 +106,7 @@ pub fn run_fastga_alignment(
     let original_path = std::env::var("PATH").unwrap_or_default();
 
     // Add our binary directory to PATH
-    let new_path = format!("{}:{}", bin_dir, original_path);
+    let new_path = format!("{bin_dir}:{original_path}");
     std::env::set_var("PATH", &new_path);
 
     // Create a pipe to capture stdout
@@ -118,7 +114,7 @@ pub fn run_fastga_alignment(
     use std::os::unix::io::FromRawFd;
 
     let (read_pipe, write_pipe) = nix::unistd::pipe()
-        .map_err(|e| FastGAError::Other(format!("Failed to create pipe: {}", e)))?;
+        .map_err(|e| FastGAError::Other(format!("Failed to create pipe: {e}")))?;
 
     // Save original stdout
     let original_stdout = unsafe { libc::dup(1) };
@@ -146,8 +142,7 @@ pub fn run_fastga_alignment(
 
     if result != 0 {
         return Err(FastGAError::FastGAExecutionFailed(format!(
-            "FastGA returned error code: {}",
-            result
+            "FastGA returned error code: {result}"
         )));
     }
 
@@ -156,7 +151,7 @@ pub fn run_fastga_alignment(
     let mut pipe_reader = unsafe { std::fs::File::from_raw_fd(read_pipe) };
     pipe_reader
         .read_to_end(&mut output)
-        .map_err(|e| FastGAError::IoError(e))?;
+        .map_err(FastGAError::IoError)?;
 
     Ok(output)
 }

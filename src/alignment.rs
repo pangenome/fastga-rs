@@ -7,7 +7,7 @@ use crate::error::{FastGAError, Result};
 use std::fmt;
 use std::fs::File;
 use std::io::{Write, BufWriter};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 /// A single local alignment between two sequences.
 ///
@@ -174,12 +174,10 @@ impl Alignment {
         };
 
         // Parse optional tags and preserve them all
-        let mut found_cigar = false;
         for field in &fields[12..] {
             if field.starts_with("cg:Z:") {
                 // Extract CIGAR string
                 alignment.cigar = field[5..].to_string();
-                found_cigar = true;
                 alignment.parse_cigar_stats()?;
             }
             // Always preserve the tag as-is
@@ -235,6 +233,12 @@ impl Alignment {
 pub struct Alignments {
     /// Vector of individual alignments
     pub alignments: Vec<Alignment>,
+}
+
+impl Default for Alignments {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl Alignments {
