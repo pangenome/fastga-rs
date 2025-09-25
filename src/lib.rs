@@ -58,22 +58,23 @@
 
 pub mod alignment;
 pub mod config;
-pub mod error;
-pub mod streaming;
 pub mod embedded;
+pub mod error;
+pub mod ffi;
+pub mod orchestrator;
 pub mod query_set;
-mod ffi;
+pub mod streaming;
 
-use std::path::Path;
+use error::Result;
 use std::fs;
+use std::path::Path;
 use std::process::Command;
 use tempfile::TempDir;
-use error::Result;
 
 pub use alignment::{Alignment, Alignments};
 pub use config::Config;
 pub use error::FastGAError;
-pub use query_set::{QueryAlignmentSet, QueryAlignmentIterator, align_queries};
+pub use query_set::{align_queries, QueryAlignmentIterator, QueryAlignmentSet};
 
 /// Main interface to the FastGA alignment engine.
 ///
@@ -173,62 +174,10 @@ impl FastGA {
 
     /// Executes FastGA binary with appropriate parameters.
     fn run_fastga(&self, genome1: &Path, genome2: &Path, _temp_dir: &TempDir) -> Result<String> {
-        // Use the embedded FastGA binary - no external dependencies!
-        let fastga = embedded::get_embedded_fastga()?;
+        // Use our Rust orchestrator that calls FFI functions directly
+        let output = orchestrator::align_direct(genome1, genome2, self.config.clone())?;
 
-        // Build arguments for FastGA - need to own strings for lifetime
-        let mut owned_args = Vec::new();
-        owned_args.push("-pafx".to_string());  // PAF output with extended CIGAR
-        owned_args.push(format!("-T{}", self.config.num_threads));
-        owned_args.push(format!("-l{}", self.config.min_alignment_length));
-
-        if let Some(min_id) = self.config.min_identity {
-            owned_args.push(format!("-i{:.2}", min_id));
-        }
-
-        let genome1_str = genome1.to_str()
-            .ok_or_else(|| FastGAError::Other("Invalid genome1 path".to_string()))?;
-        let genome2_str = genome2.to_str()
-            .ok_or_else(|| FastGAError::Other("Invalid genome2 path".to_string()))?;
-
-        owned_args.push(genome1_str.to_string());
-        owned_args.push(genome2_str.to_string());
-
-        // Convert to &str slice for run_fastga
-        let args: Vec<&str> = owned_args.iter().map(|s| s.as_str()).collect();
-
-        // Run embedded FastGA
-        fastga.run_fastga(&args)
-    }
-}
-
-// Remove the old implementation that used Command directly
-impl FastGA {
-    fn run_fastga_old(&self, genome1: &Path, genome2: &Path, _temp_dir: &TempDir) -> Result<String> {
-        // Old implementation - kept for reference
-        let mut cmd = Command::new("unused");
-
-        // FastGA expects arguments in the form -T<value> (no space)
-        cmd.arg("-pafx")  // PAF output with extended CIGAR
-            .arg(format!("-T{}", self.config.num_threads))
-            .arg(format!("-l{}", self.config.min_alignment_length));
-
-        if let Some(min_id) = self.config.min_identity {
-            // FastGA uses -i for identity threshold
-            cmd.arg(format!("-i{:.2}", min_id));
-        }
-
-        cmd.arg(genome1)
-            .arg(genome2);
-
-        let output = cmd.output()?;
-
-        if !output.status.success() {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(FastGAError::FastGAExecutionFailed(stderr.to_string()));
-        }
-
-        Ok(String::from_utf8_lossy(&output.stdout).to_string())
+        Ok(String::from_utf8_lossy(&output).to_string())
     }
 
     /// Aligns sequences with streaming output and filtering capability.
@@ -271,7 +220,7 @@ impl FastGA {
     /// # Ok(())
     /// # }
     /// ```
-    pub fn align_streaming<F>(&self, genome1: &Path, genome2: &Path, mut callback: F) -> Result<()>
+    pub fn align_streaming<F>(&self, genome1: &Path, genome2: &Path, callback: F) -> Result<()>
     where
         F: FnMut(Alignment) -> bool,
     {
@@ -279,9 +228,10 @@ impl FastGA {
         let mut aligner = streaming::StreamingAligner::new(self.config.clone());
         let stats = aligner.align_files(genome1, genome2, callback)?;
 
-        eprintln!("Streaming alignment complete: {} alignments processed, {} kept",
-                  stats.total_alignments,
-                  stats.kept_alignments);
+        eprintln!(
+            "Streaming alignment complete: {} alignments processed, {} kept",
+            stats.total_alignments, stats.kept_alignments
+        );
 
         Ok(())
     }
@@ -298,7 +248,12 @@ impl FastGA {
     ///
     /// # Returns
     /// Only the alignments that pass the filter
-    pub fn align_query_vs_all<F>(&self, query: &[u8], target_file: &Path, filter: Option<F>) -> Result<Vec<Alignment>>
+    pub fn align_query_vs_all<F>(
+        &self,
+        query: &[u8],
+        target_file: &Path,
+        filter: Option<F>,
+    ) -> Result<Vec<Alignment>>
     where
         F: Fn(&Alignment) -> bool + 'static,
     {

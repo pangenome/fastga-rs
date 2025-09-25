@@ -178,18 +178,25 @@ fn parse_paf_line(line: &str) -> Result<Alignment> {
         target_len: fields[6].parse()?,
         target_start: fields[7].parse()?,
         target_end: fields[8].parse()?,
-        residue_matches: fields[9].parse()?,
-        block_length: fields[10].parse()?,
+        matches: fields[9].parse()?,
+        block_len: fields[10].parse()?,
         mapping_quality: fields[11].parse()?,
-        ..Default::default()
+        cigar: String::new(),
+        mismatches: 0,
+        gap_opens: 0,
+        gap_len: 0,
+        tags: Vec::new(),
     };
 
     // Parse CIGAR from tags
     for tag in &fields[12..] {
         if tag.starts_with("cg:Z:") {
             alignment.cigar = tag[5..].to_string();
-        } else if tag.starts_with("dv:f:") {
-            alignment.divergence = tag[5..].parse().ok();
+        } else if tag.starts_with("NM:i:") {
+            // Parse number of mismatches
+            if let Ok(nm) = tag[5..].parse::<usize>() {
+                alignment.mismatches = nm;
+            }
         }
     }
 

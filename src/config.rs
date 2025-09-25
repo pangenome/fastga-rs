@@ -52,7 +52,7 @@ impl Default for Config {
         Config {
             min_alignment_length: 100,
             min_identity: None,
-            num_threads: num_cpus::get().max(1),  // Ensure at least 1 thread
+            num_threads: num_cpus::get().max(1), // Ensure at least 1 thread
             chain_break: 2000,
             chain_min: 170,
             frequency: 10,
@@ -102,7 +102,10 @@ impl ConfigBuilder {
     /// Value should be between 0.0 and 1.0.
     /// Default: None (no identity filtering)
     pub fn min_identity(mut self, identity: f64) -> Self {
-        assert!(identity >= 0.0 && identity <= 1.0, "Identity must be between 0.0 and 1.0");
+        assert!(
+            identity >= 0.0 && identity <= 1.0,
+            "Identity must be between 0.0 and 1.0"
+        );
         self.config.min_identity = Some(identity);
         self
     }

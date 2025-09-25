@@ -1,9 +1,9 @@
 //! Real-world test using actual yeast genome data
 //! This validates identity calculations and plane sweep scoring on real alignments
 
-use fastga_rs::{FastGA, Config};
-use std::path::Path;
 use anyhow::Result;
+use fastga_rs::{Config, FastGA};
+use std::path::Path;
 
 #[test]
 fn test_chrV_identity_scoring() -> Result<()> {
@@ -67,7 +67,9 @@ fn test_chrV_identity_scoring() -> Result<()> {
     println!("  Moderate identity (≥80%): {}", moderate_identity);
 
     // Examine top alignments by plane sweep score
-    let mut scored_alignments: Vec<_> = alignments.alignments.iter()
+    let mut scored_alignments: Vec<_> = alignments
+        .alignments
+        .iter()
         .map(|a| {
             let length = a.query_end - a.query_start;
             let score = a.identity() * (length as f64).ln();
@@ -81,9 +83,19 @@ fn test_chrV_identity_scoring() -> Result<()> {
     for (i, (alignment, score)) in scored_alignments.iter().take(5).enumerate() {
         let length = alignment.query_end - alignment.query_start;
         println!("\n{}. Score: {:.2}", i + 1, score);
-        println!("   Query: {} ({}..{})", alignment.query_name, alignment.query_start, alignment.query_end);
-        println!("   Target: {} ({}..{})", alignment.target_name, alignment.target_start, alignment.target_end);
-        println!("   Length: {}bp, Identity: {:.2}%", length, alignment.identity() * 100.0);
+        println!(
+            "   Query: {} ({}..{})",
+            alignment.query_name, alignment.query_start, alignment.query_end
+        );
+        println!(
+            "   Target: {} ({}..{})",
+            alignment.target_name, alignment.target_start, alignment.target_end
+        );
+        println!(
+            "   Length: {}bp, Identity: {:.2}%",
+            length,
+            alignment.identity() * 100.0
+        );
 
         // Show first part of CIGAR to verify extended format
         let cigar_preview = if alignment.cigar.len() > 50 {
@@ -95,25 +107,37 @@ fn test_chrV_identity_scoring() -> Result<()> {
     }
 
     // Verify specific expectations about real yeast alignments
-    assert!(!alignments.is_empty(), "Should find alignments in yeast data");
+    assert!(
+        !alignments.is_empty(),
+        "Should find alignments in yeast data"
+    );
 
     // Self-alignment should have at least one perfect match
-    assert!(perfect_matches > 0, "Self-alignment should have perfect matches");
+    assert!(
+        perfect_matches > 0,
+        "Self-alignment should have perfect matches"
+    );
 
     // Check that the best alignment is the self-alignment
     if let Some((best_alignment, best_score)) = scored_alignments.first() {
-        assert!(best_alignment.identity() == 1.0,
-                "Best alignment should be perfect self-match");
+        assert!(
+            best_alignment.identity() == 1.0,
+            "Best alignment should be perfect self-match"
+        );
 
         // For a perfect self-alignment, score = 1.0 * ln(length)
         let expected_score = (best_alignment.query_end - best_alignment.query_start) as f64;
         let expected_score = expected_score.ln();
-        assert!((best_score - expected_score).abs() < 0.001,
-                "Perfect match score should equal ln(length)");
+        assert!(
+            (best_score - expected_score).abs() < 0.001,
+            "Perfect match score should equal ln(length)"
+        );
     }
 
     // Test filtering by identity threshold (for plane sweep filter use case)
-    let high_quality_alignments: Vec<_> = alignments.alignments.iter()
+    let high_quality_alignments: Vec<_> = alignments
+        .alignments
+        .iter()
         .filter(|a| a.identity() >= 0.95)
         .collect();
 
@@ -122,22 +146,30 @@ fn test_chrV_identity_scoring() -> Result<()> {
     println!("Alignments after filter: {}", high_quality_alignments.len());
 
     // For self-alignment, most should be high identity
-    assert!(high_quality_alignments.len() > 0,
-            "Should have high-identity alignments");
+    assert!(
+        high_quality_alignments.len() > 0,
+        "Should have high-identity alignments"
+    );
 
     // Test specific CIGAR parsing for identity calculation
-    if let Some(test_alignment) = alignments.alignments.iter()
-        .find(|a| !a.cigar.is_empty() && a.cigar.contains('=')) {
-
+    if let Some(test_alignment) = alignments
+        .alignments
+        .iter()
+        .find(|a| !a.cigar.is_empty() && a.cigar.contains('='))
+    {
         // Count operators in CIGAR
         let match_count = test_alignment.cigar.matches('=').count();
         let mismatch_count = test_alignment.cigar.matches('X').count();
 
         println!("\n=== CIGAR Identity Validation ===");
-        println!("Test alignment: {} -> {}",
-                 test_alignment.query_name, test_alignment.target_name);
-        println!("CIGAR operators: {} matches (=), {} mismatches (X)",
-                 match_count, mismatch_count);
+        println!(
+            "Test alignment: {} -> {}",
+            test_alignment.query_name, test_alignment.target_name
+        );
+        println!(
+            "CIGAR operators: {} matches (=), {} mismatches (X)",
+            match_count, mismatch_count
+        );
 
         // Parse CIGAR to calculate expected identity
         let mut total_bases = 0;
@@ -166,9 +198,12 @@ fn test_chrV_identity_scoring() -> Result<()> {
             println!("Reported identity: {:.4}", reported_identity);
 
             // They should match within floating point tolerance
-            assert!((expected_identity - reported_identity).abs() < 0.01,
-                    "Identity calculation mismatch: expected {:.4}, got {:.4}",
-                    expected_identity, reported_identity);
+            assert!(
+                (expected_identity - reported_identity).abs() < 0.01,
+                "Identity calculation mismatch: expected {:.4}, got {:.4}",
+                expected_identity,
+                reported_identity
+            );
         }
     }
 
@@ -200,14 +235,18 @@ fn test_plane_sweep_scoring_properties() -> Result<()> {
 
         println!("\n=== Plane Sweep Score Properties ===");
         println!("Perfect alignment (100% identity, {} bp):", perfect_length);
-        println!("  Score = 1.0 × ln({}) = {:.2}", perfect_length, perfect_score);
+        println!(
+            "  Score = 1.0 × ln({}) = {:.2}",
+            perfect_length, perfect_score
+        );
 
         // Now test with sequences that have mismatches
         let seq2_path = temp_dir.path().join("variant.fasta");
-        std::fs::write(&seq2_path,
+        std::fs::write(
+            &seq2_path,
             b">seq2\n\
             ATGGCAAAGAAGACCAAAGCTCCATCAGAAGAGGCCATCAAGAATCTTATGGCTAAGAAGACAAGCTTTACGAGCCACG\n\
-            GAAGAACGCCTTGTGGTGGACAAGAAGCAGGTGCTGGAGAAGCAGAAGACCAAGGCCAAGGAGCTGGCCAAGAAGGCT\n"
+            GAAGAACGCCTTGTGGTGGACAAGAAGCAGGTGCTGGAGAAGCAGAAGACCAAGGCCAAGGAGCTGGCCAAGAAGGCT\n",
         )?;
 
         let variant_alignments = aligner.align_files(&seq1_path, &seq2_path)?;
@@ -216,14 +255,23 @@ fn test_plane_sweep_scoring_properties() -> Result<()> {
             let variant_length = variant.query_end - variant.query_start;
             let variant_score = variant.identity() * (variant_length as f64).ln();
 
-            println!("\nVariant alignment ({:.1}% identity, {} bp):",
-                     variant.identity() * 100.0, variant_length);
-            println!("  Score = {:.3} × ln({}) = {:.2}",
-                     variant.identity(), variant_length, variant_score);
+            println!(
+                "\nVariant alignment ({:.1}% identity, {} bp):",
+                variant.identity() * 100.0,
+                variant_length
+            );
+            println!(
+                "  Score = {:.3} × ln({}) = {:.2}",
+                variant.identity(),
+                variant_length,
+                variant_score
+            );
 
             // Perfect match should score higher than imperfect match of same length
-            assert!(perfect_score > variant_score,
-                    "Perfect match should score higher than variant");
+            assert!(
+                perfect_score > variant_score,
+                "Perfect match should score higher than variant"
+            );
 
             // Score should be monotonic with identity for same length
             println!("\n✓ Scoring function is monotonic with identity");

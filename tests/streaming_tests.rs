@@ -1,11 +1,11 @@
 //! Comprehensive tests for the streaming API.
 
-use fastga_rs::{FastGA, Config, Alignment};
-use fastga_rs::streaming::{StreamingAligner, BestHitFilter, align_streaming_simple};
-use std::path::Path;
-use std::fs;
-use std::sync::{Arc, Mutex};
 use anyhow::Result;
+use fastga_rs::streaming::{align_streaming_simple, BestHitFilter, StreamingAligner};
+use fastga_rs::{Alignment, Config, FastGA};
+use std::fs;
+use std::path::Path;
+use std::sync::{Arc, Mutex};
 
 /// Create test FASTA files using chromosome test data
 fn create_test_sequences() -> Result<(tempfile::TempDir, std::path::PathBuf, std::path::PathBuf)> {
@@ -21,10 +21,7 @@ fn create_test_sequences() -> Result<(tempfile::TempDir, std::path::PathBuf, std
 
         // Decompress the file
         use std::process::Command;
-        let output = Command::new("gunzip")
-            .arg("-c")
-            .arg(chrV_file)
-            .output()?;
+        let output = Command::new("gunzip").arg("-c").arg(chrV_file).output()?;
 
         fs::write(&seq1_path, &output.stdout)?;
         fs::write(&seq2_path, &output.stdout)?;
@@ -50,14 +47,10 @@ fn test_streaming_basic() -> Result<()> {
 
     let mut alignments_collected = Vec::new();
 
-    let stats = align_streaming_simple(
-        &seq1,
-        &seq2,
-        |alignment| {
-            alignments_collected.push(alignment);
-            true  // Keep all alignments
-        }
-    )?;
+    let stats = align_streaming_simple(&seq1, &seq2, |alignment| {
+        alignments_collected.push(alignment);
+        true // Keep all alignments
+    })?;
 
     // We should get some alignments
     assert!(stats.total_alignments > 0);
@@ -74,19 +67,15 @@ fn test_streaming_with_filters() -> Result<()> {
 
     // Add filters
     aligner
-        .filter_min_identity(0.95)  // High identity filter
-        .filter_min_length(50);     // Minimum length
+        .filter_min_identity(0.95) // High identity filter
+        .filter_min_length(50); // Minimum length
 
     let mut high_quality_alignments = Vec::new();
 
-    let stats = aligner.align_files(
-        &seq1,
-        &seq2,
-        |alignment| {
-            high_quality_alignments.push(alignment);
-            true
-        }
-    )?;
+    let stats = aligner.align_files(&seq1, &seq2, |alignment| {
+        high_quality_alignments.push(alignment);
+        true
+    })?;
 
     // Check that filtering worked
     assert!(stats.filtered_alignments > 0 || stats.kept_alignments > 0);
@@ -111,14 +100,10 @@ fn test_query_filter() -> Result<()> {
 
     let mut chr1_alignments = Vec::new();
 
-    aligner.align_files(
-        &seq1,
-        &seq2,
-        |alignment| {
-            chr1_alignments.push(alignment.clone());
-            true
-        }
-    )?;
+    aligner.align_files(&seq1, &seq2, |alignment| {
+        chr1_alignments.push(alignment.clone());
+        true
+    })?;
 
     // All alignments should be from chr1
     for aln in &chr1_alignments {
@@ -137,14 +122,10 @@ fn test_best_hit_filter() -> Result<()> {
 
     let mut aligner = StreamingAligner::new(Config::default());
 
-    aligner.align_files(
-        &seq1,
-        &seq2,
-        move |alignment| {
-            best_hits_clone.lock().unwrap().process(alignment);
-            true
-        }
-    )?;
+    aligner.align_files(&seq1, &seq2, move |alignment| {
+        best_hits_clone.lock().unwrap().process(alignment);
+        true
+    })?;
 
     let best = Arc::try_unwrap(best_hits)
         .unwrap()
@@ -153,8 +134,7 @@ fn test_best_hit_filter() -> Result<()> {
         .into_alignments();
 
     // Should have at most one alignment per query
-    let unique_queries: std::collections::HashSet<_> =
-        best.iter().map(|a| &a.query_name).collect();
+    let unique_queries: std::collections::HashSet<_> = best.iter().map(|a| &a.query_name).collect();
     assert_eq!(unique_queries.len(), best.len());
 
     Ok(())
@@ -167,14 +147,10 @@ fn test_streaming_callback_control() -> Result<()> {
     let mut count = 0;
     let max_alignments = 2;
 
-    let stats = align_streaming_simple(
-        &seq1,
-        &seq2,
-        |_alignment| {
-            count += 1;
-            count <= max_alignments  // Stop after max_alignments
-        }
-    )?;
+    let stats = align_streaming_simple(&seq1, &seq2, |_alignment| {
+        count += 1;
+        count <= max_alignments // Stop after max_alignments
+    })?;
 
     // We should have processed some but kept only max_alignments
     assert!(stats.kept_alignments <= max_alignments);
@@ -197,11 +173,7 @@ fn test_aggregator() -> Result<()> {
         *total_bases_clone.lock().unwrap() += bases;
     });
 
-    aligner.align_files(
-        &seq1,
-        &seq2,
-        |_| true
-    )?;
+    aligner.align_files(&seq1, &seq2, |_| true)?;
 
     let total = *total_bases.lock().unwrap();
     assert!(total > 0, "Should have counted some aligned bases");
@@ -219,14 +191,10 @@ fn test_query_vs_all() -> Result<()> {
 
     let mut aligner = StreamingAligner::new(Config::default());
 
-    let alignments = aligner.align_query_vs_all(
-        query,
-        &seq2,
-        |alignment| {
-            // Only keep high-identity alignments
-            alignment.identity() > 0.9
-        }
-    )?;
+    let alignments = aligner.align_query_vs_all(query, &seq2, |alignment| {
+        // Only keep high-identity alignments
+        alignment.identity() > 0.9
+    })?;
 
     // All returned alignments should have the query name
     for aln in &alignments {
@@ -256,19 +224,20 @@ fn test_streaming_with_yeast_data() -> Result<()> {
 
     let stats = align_streaming_simple(
         &temp_yeast,
-        &temp_yeast,  // Self-alignment
+        &temp_yeast, // Self-alignment
         |alignment| {
             alignment_count += 1;
             total_identity += alignment.identity();
 
             // For self-alignment, same sequences should have 100% identity
-            if alignment.query_name == alignment.target_name &&
-               alignment.query_start == alignment.target_start {
+            if alignment.query_name == alignment.target_name
+                && alignment.query_start == alignment.target_start
+            {
                 assert_eq!(alignment.identity(), 1.0);
             }
 
             true
-        }
+        },
     )?;
 
     assert!(alignment_count > 0);
@@ -288,12 +257,7 @@ fn test_paf_streaming() -> Result<()> {
 
     let mut output = Cursor::new(Vec::new());
 
-    let stats = fastga_rs::streaming::stream_to_paf(
-        &seq1,
-        &seq2,
-        Config::default(),
-        &mut output
-    )?;
+    let stats = fastga_rs::streaming::stream_to_paf(&seq1, &seq2, Config::default(), &mut output)?;
 
     let paf_output = String::from_utf8(output.into_inner())?;
 
@@ -307,7 +271,10 @@ fn test_paf_streaming() -> Result<()> {
     // Verify PAF format (12+ tab-separated fields)
     for line in paf_output.lines() {
         let fields: Vec<_> = line.split('\t').collect();
-        assert!(fields.len() >= 12, "PAF line should have at least 12 fields");
+        assert!(
+            fields.len() >= 12,
+            "PAF line should have at least 12 fields"
+        );
     }
 
     Ok(())
@@ -329,14 +296,10 @@ fn test_multiple_filters_composition() -> Result<()> {
 
     let mut filtered = Vec::new();
 
-    aligner.align_files(
-        &seq1,
-        &seq2,
-        |alignment| {
-            filtered.push(alignment.clone());
-            true
-        }
-    )?;
+    aligner.align_files(&seq1, &seq2, |alignment| {
+        filtered.push(alignment.clone());
+        true
+    })?;
 
     // Verify all filters were applied
     for aln in &filtered {
@@ -354,11 +317,7 @@ fn test_multiple_filters_composition() -> Result<()> {
 fn test_error_handling_invalid_file() {
     let mut aligner = StreamingAligner::new(Config::default());
 
-    let result = aligner.align_files(
-        "nonexistent1.fa",
-        "nonexistent2.fa",
-        |_| true
-    );
+    let result = aligner.align_files("nonexistent1.fa", "nonexistent2.fa", |_| true);
 
     assert!(result.is_err());
 }
@@ -379,14 +338,10 @@ fn test_concurrent_streaming() -> Result<()> {
             thread::spawn(move || -> Result<usize> {
                 let mut count = 0;
 
-                align_streaming_simple(
-                    &seq1,
-                    &seq2,
-                    |_alignment| {
-                        count += 1;
-                        true
-                    }
-                )?;
+                align_streaming_simple(&seq1, &seq2, |_alignment| {
+                    count += 1;
+                    true
+                })?;
 
                 println!("Thread {} processed {} alignments", i, count);
                 Ok(count)

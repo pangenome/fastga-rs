@@ -1,9 +1,9 @@
 //! Integration tests for FastGA-RS using real yeast genome data.
 
-use fastga_rs::{FastGA, Config};
-use std::path::Path;
-use std::fs;
 use anyhow::Result;
+use fastga_rs::{Config, FastGA};
+use std::fs;
+use std::path::Path;
 use tempfile::TempDir;
 
 #[test]
@@ -61,7 +61,10 @@ fn test_chrV_self_alignment() -> Result<()> {
     // Check PAF format
     let first_line = paf_output.lines().next().unwrap();
     let fields: Vec<&str> = first_line.split('\t').collect();
-    assert!(fields.len() >= 12, "PAF line should have at least 12 fields");
+    assert!(
+        fields.len() >= 12,
+        "PAF line should have at least 12 fields"
+    );
 
     println!("\nPAF output (first line):");
     println!("{}", first_line);
@@ -94,39 +97,67 @@ fn test_chrV_cross_strain_alignment() -> Result<()> {
     // Self-alignment will find all strain-vs-strain alignments
     let alignments = aligner.align_files(&temp_chrV, &temp_chrV)?;
 
-    assert!(!alignments.is_empty(), "Should find alignments between strains");
+    assert!(
+        !alignments.is_empty(),
+        "Should find alignments between strains"
+    );
 
     // Track self-alignments by sequence name to find the best/longest one
-    let mut self_coverage: std::collections::HashMap<String, Vec<_>> = std::collections::HashMap::new();
+    let mut self_coverage: std::collections::HashMap<String, Vec<_>> =
+        std::collections::HashMap::new();
     let mut cross_strain_alignments = 0;
 
     for aln in &alignments.alignments {
         if aln.query_name == aln.target_name {
             // Self-alignment
-            self_coverage.entry(aln.query_name.clone()).or_insert(Vec::new()).push(aln);
+            self_coverage
+                .entry(aln.query_name.clone())
+                .or_insert(Vec::new())
+                .push(aln);
         } else {
             cross_strain_alignments += 1;
             let identity = aln.identity();
-            println!("Cross-strain alignment: {} vs {} = {:.2}%",
-                     aln.query_name, aln.target_name, identity * 100.0);
-            assert!(identity > 0.70, "Different strains should share some similarity");
+            println!(
+                "Cross-strain alignment: {} vs {} = {:.2}%",
+                aln.query_name,
+                aln.target_name,
+                identity * 100.0
+            );
+            assert!(
+                identity > 0.70,
+                "Different strains should share some similarity"
+            );
         }
     }
 
     // Check self-alignment coverage for each strain
     for (strain, alns) in &self_coverage {
         // Find the main self-alignment (should cover most/all of the sequence)
-        let main_aln = alns.iter()
+        let main_aln = alns
+            .iter()
             .max_by_key(|a| a.query_end - a.query_start)
             .expect("Should have at least one self-alignment");
 
-        let coverage = (main_aln.query_end - main_aln.query_start) as f64 / main_aln.query_len as f64;
-        println!("Self-alignment for {}: coverage={:.1}%, identity={:.1}%",
-                 strain, coverage * 100.0, main_aln.identity() * 100.0);
+        let coverage =
+            (main_aln.query_end - main_aln.query_start) as f64 / main_aln.query_len as f64;
+        println!(
+            "Self-alignment for {}: coverage={:.1}%, identity={:.1}%",
+            strain,
+            coverage * 100.0,
+            main_aln.identity() * 100.0
+        );
 
         // Main self-alignment should have near-complete coverage and perfect identity
-        assert!(coverage > 0.95, "{} should have >95% self-alignment coverage", strain);
-        assert!(main_aln.identity() > 0.99, "{} self-alignment should be >99% identity", strain);
+        assert!(
+            coverage > 0.95,
+            "{} should have >95% self-alignment coverage",
+            strain
+        );
+        assert!(
+            main_aln.identity() > 0.99,
+            "{} self-alignment should be >99% identity",
+            strain
+        );
     }
 
     Ok(())
@@ -152,8 +183,7 @@ fn test_custom_config() {
 
     // This would test with actual alignment if we had test files
     // For now, just verify construction works
-    assert!(aligner.align_files(
-        Path::new("nonexistent1.fa"),
-        Path::new("nonexistent2.fa")
-    ).is_err());
+    assert!(aligner
+        .align_files(Path::new("nonexistent1.fa"), Path::new("nonexistent2.fa"))
+        .is_err());
 }

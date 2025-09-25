@@ -2,14 +2,18 @@
 //!
 //! These tests verify more complex scenarios and edge cases.
 
-use fastga_rs::{FastGA, Config, Alignment};
-use std::path::Path;
-use std::fs;
 use anyhow::Result;
+use fastga_rs::{Alignment, Config, FastGA};
+use std::fs;
+use std::path::Path;
 use tempfile::TempDir;
 
 /// Create a multi-sequence FASTA file for testing
-fn create_multi_sequence_fasta(dir: &Path, filename: &str, num_sequences: usize) -> Result<std::path::PathBuf> {
+fn create_multi_sequence_fasta(
+    dir: &Path,
+    filename: &str,
+    num_sequences: usize,
+) -> Result<std::path::PathBuf> {
     let mut content = String::new();
 
     for i in 0..num_sequences {
@@ -41,18 +45,20 @@ fn test_extended_cigar_operators() -> Result<()> {
     // Use a real yeast sequence with a known mutation
     // This is actual yeast DNA that FastGA can align properly
     let seq1_path = temp_dir.path().join("seq1.fasta");
-    fs::write(&seq1_path,
+    fs::write(
+        &seq1_path,
         b">ref\n\
         ATGGCAAAGAAGACCAAAGCTCCATCAGAAGAGGCCATCAAGAATCTTATGGCTAAGAAGACAAGCTATACGAGCCACG\n\
-        GAAGAACGCCTTGTGGTGGACAAGAAGCAGGTGCTGGAGAAGCAGAAGACCAAGGCCAAGGAGCTGGCCAAGAAGGCT\n"
+        GAAGAACGCCTTGTGGTGGACAAGAAGCAGGTGCTGGAGAAGCAGAAGACCAAGGCCAAGGAGCTGGCCAAGAAGGCT\n",
     )?;
 
     // Same sequence but with a few mismatches (X instead of = in CIGAR)
     let seq2_path = temp_dir.path().join("seq2.fasta");
-    fs::write(&seq2_path,
+    fs::write(
+        &seq2_path,
         b">query\n\
         ATGGCAAAGAAGACCAAAGCTCCATCAGAAGAGGCCATCAAGAATCTTATGGCTAAGAAGACAAGCTTTACGAGCCACG\n\
-        GAAGAACGCCTTGTGGTGGACAAGAAGCAGGTGCTGGAGAAGCAGAAGACCAAGGCCAAGGAGCTGGCCAAGAAGGCT\n"
+        GAAGAACGCCTTGTGGTGGACAAGAAGCAGGTGCTGGAGAAGCAGAAGACCAAGGCCAAGGAGCTGGCCAAGAAGGCT\n",
     )?;
 
     let aligner = FastGA::new(Config::default())?;
@@ -69,8 +75,11 @@ fn test_extended_cigar_operators() -> Result<()> {
         let has_match_op = cigar.contains('=');
         let has_mismatch_op = cigar.contains('X');
 
-        assert!(has_match_op || has_mismatch_op || cigar.is_empty(),
-                "CIGAR '{}' should contain extended operators", cigar);
+        assert!(
+            has_match_op || has_mismatch_op || cigar.is_empty(),
+            "CIGAR '{}' should contain extended operators",
+            cigar
+        );
 
         // If we have a good alignment, verify the CIGAR makes sense
         if !cigar.is_empty() && alignment.identity() > 0.8 {
@@ -78,9 +87,10 @@ fn test_extended_cigar_operators() -> Result<()> {
             let match_count = cigar.matches('=').count();
             let mismatch_count = cigar.matches('X').count();
 
-            println!("Alignment {} -> {}: {} matches, {} mismatches",
-                     alignment.query_name, alignment.target_name,
-                     match_count, mismatch_count);
+            println!(
+                "Alignment {} -> {}: {} matches, {} mismatches",
+                alignment.query_name, alignment.target_name, match_count, mismatch_count
+            );
         }
     }
 
@@ -105,13 +115,28 @@ fn test_different_config_presets() -> Result<()> {
     let repetitive_alignments = repetitive_aligner.align_files(&seq_path, &seq_path)?;
 
     // All should produce some alignments
-    assert!(!high_sens_alignments.is_empty(), "High sensitivity should find alignments");
-    assert!(!fast_alignments.is_empty(), "Fast mode should find alignments");
-    assert!(!repetitive_alignments.is_empty(), "Repetitive mode should find alignments");
+    assert!(
+        !high_sens_alignments.is_empty(),
+        "High sensitivity should find alignments"
+    );
+    assert!(
+        !fast_alignments.is_empty(),
+        "Fast mode should find alignments"
+    );
+    assert!(
+        !repetitive_alignments.is_empty(),
+        "Repetitive mode should find alignments"
+    );
 
-    println!("High sensitivity: {} alignments", high_sens_alignments.len());
+    println!(
+        "High sensitivity: {} alignments",
+        high_sens_alignments.len()
+    );
     println!("Fast mode: {} alignments", fast_alignments.len());
-    println!("Repetitive mode: {} alignments", repetitive_alignments.len());
+    println!(
+        "Repetitive mode: {} alignments",
+        repetitive_alignments.len()
+    );
 
     Ok(())
 }
@@ -126,17 +151,19 @@ fn test_identity_calculation_accuracy() -> Result<()> {
     // Create two sequences with known differences
     // Identical except for 2 positions out of 160
     let seq1_path = temp_dir.path().join("seq1.fasta");
-    fs::write(&seq1_path,
+    fs::write(
+        &seq1_path,
         b">ref\n\
         ATGGCAAAGAAGACCAAAGCTCCATCAGAAGAGGCCATCAAGAATCTTATGGCTAAGAAGACAAGCTATACGAGCCACG\n\
-        GAAGAACGCCTTGTGGTGGACAAGAAGCAGGTGCTGGAGAAGCAGAAGACCAAGGCCAAGGAGCTGGCCAAGAAGGCT\n"
+        GAAGAACGCCTTGTGGTGGACAAGAAGCAGGTGCTGGAGAAGCAGAAGACCAAGGCCAAGGAGCTGGCCAAGAAGGCT\n",
     )?;
 
     let seq2_path = temp_dir.path().join("seq2.fasta");
-    fs::write(&seq2_path,
+    fs::write(
+        &seq2_path,
         b">query\n\
         ATGGCAAAGAAGACCAAAGCTCCATCAGAAGAGGCCATCAAGAATCTTATGGCTAAGAAGACAAGCTTTACGAGCCACG\n\
-        GAAGAACGCCTTGTGGTGGACAAGAAGCAGGTGCTGGAGAAGCAGAAGACCAAGGCCAAGGAGCTGGCCAAGAAGGCT\n"
+        GAAGAACGCCTTGTGGTGGACAAGAAGCAGGTGCTGGAGAAGCAGAAGACCAAGGCCAAGGAGCTGGCCAAGAAGGCT\n",
     )?;
 
     let aligner = FastGA::new(Config::default())?;
@@ -156,8 +183,11 @@ fn test_identity_calculation_accuracy() -> Result<()> {
         println!("Plane sweep score (identity * ln(length)): {:.4}", score);
 
         // Identity should be very high (158/160 = 0.9875)
-        assert!(identity > 0.98 && identity < 1.0,
-                "Identity {} should be ~0.9875 for 2 mismatches in 160bp", identity);
+        assert!(
+            identity > 0.98 && identity < 1.0,
+            "Identity {} should be ~0.9875 for 2 mismatches in 160bp",
+            identity
+        );
     }
 
     Ok(())
@@ -170,26 +200,29 @@ fn test_identity_threshold_filtering() -> Result<()> {
 
     // Test with different identity thresholds
     // FastGA requires minimum identity in range [0.55, 1.0)
-    let config_90 = Config::builder()
-        .min_identity(0.9)
-        .build();
+    let config_90 = Config::builder().min_identity(0.9).build();
     let aligner_90 = FastGA::new(config_90)?;
     let alignments_90 = aligner_90.align_files(&seq_path, &seq_path)?;
 
     let config_55 = Config::builder()
-        .min_identity(0.55)  // Minimum allowed by FastGA
+        .min_identity(0.55) // Minimum allowed by FastGA
         .build();
     let aligner_55 = FastGA::new(config_55)?;
     let alignments_55 = aligner_55.align_files(&seq_path, &seq_path)?;
 
     // Lower threshold should allow more alignments
-    assert!(alignments_55.len() >= alignments_90.len(),
-            "Lower identity threshold should find same or more alignments");
+    assert!(
+        alignments_55.len() >= alignments_90.len(),
+        "Lower identity threshold should find same or more alignments"
+    );
 
     // Verify identity filtering worked
     for alignment in alignments_90.alignments {
-        assert!(alignment.identity() >= 0.9,
-                "Alignment identity {} should be >= 0.9", alignment.identity());
+        assert!(
+            alignment.identity() >= 0.9,
+            "Alignment identity {} should be >= 0.9",
+            alignment.identity()
+        );
     }
 
     Ok(())
@@ -211,23 +244,34 @@ fn test_paf_format_compliance() -> Result<()> {
             let fields: Vec<&str> = line.split('\t').collect();
 
             // PAF format requires at least 12 mandatory fields
-            assert!(fields.len() >= 12,
-                    "PAF line should have at least 12 fields, got {}", fields.len());
+            assert!(
+                fields.len() >= 12,
+                "PAF line should have at least 12 fields, got {}",
+                fields.len()
+            );
 
             // Field 0: Query sequence name
             assert!(!fields[0].is_empty(), "Query name should not be empty");
 
             // Field 1: Query sequence length
-            assert!(fields[1].parse::<usize>().is_ok(), "Query length should be numeric");
+            assert!(
+                fields[1].parse::<usize>().is_ok(),
+                "Query length should be numeric"
+            );
 
             // Field 4: Strand (+ or -)
-            assert!(fields[4] == "+" || fields[4] == "-", "Strand should be + or -");
+            assert!(
+                fields[4] == "+" || fields[4] == "-",
+                "Strand should be + or -"
+            );
 
             // Field 5: Target sequence name
             assert!(!fields[5].is_empty(), "Target name should not be empty");
 
             // Check for CIGAR string in optional fields
-            let has_cigar = fields.iter().skip(12)
+            let has_cigar = fields
+                .iter()
+                .skip(12)
                 .any(|f| f.starts_with("cg:Z:") || f.starts_with("cigar:Z:"));
 
             if has_cigar {
@@ -238,8 +282,7 @@ fn test_paf_format_compliance() -> Result<()> {
                         // Extended CIGAR should have valid operators
                         for c in cigar.chars() {
                             if c.is_alphabetic() {
-                                assert!("MIDNSHP=X".contains(c),
-                                        "Invalid CIGAR operator: {}", c);
+                                assert!("MIDNSHP=X".contains(c), "Invalid CIGAR operator: {}", c);
                             }
                         }
                     }
@@ -247,7 +290,10 @@ fn test_paf_format_compliance() -> Result<()> {
             }
         }
 
-        println!("PAF format validation passed for {} lines", paf_output.lines().count());
+        println!(
+            "PAF format validation passed for {} lines",
+            paf_output.lines().count()
+        );
     }
 
     Ok(())
@@ -259,10 +305,11 @@ fn test_self_alignment_symmetry() -> Result<()> {
 
     // Create a longer, more complex sequence for self-alignment
     let seq_path = temp_dir.path().join("self.fasta");
-    fs::write(&seq_path,
+    fs::write(
+        &seq_path,
         b">self\n\
         ATGGCAAAGAAGACCAAAGCTCCATCAGAAGAGGCCATCAAGAATCTTATGGCTAAGAAGACAAGCTATACGAGCCACG\n\
-        GAAGAACGCCTTGTGGTGGACAAGAAGCAGGTGCTGGAGAAGCAGAAGACCAAGGCCAAGGAGCTGGCCAAGAAGGCT\n"
+        GAAGAACGCCTTGTGGTGGACAAGAAGCAGGTGCTGGAGAAGCAGAAGACCAAGGCCAAGGAGCTGGCCAAGAAGGCT\n",
     )?;
 
     let aligner = FastGA::new(Config::default())?;
@@ -273,17 +320,24 @@ fn test_self_alignment_symmetry() -> Result<()> {
 
     let mut found_perfect = false;
     for alignment in &alignments.alignments {
-        if alignment.query_name == alignment.target_name &&
-           alignment.query_start == alignment.target_start &&
-           alignment.query_end == alignment.target_end {
+        if alignment.query_name == alignment.target_name
+            && alignment.query_start == alignment.target_start
+            && alignment.query_end == alignment.target_end
+        {
             // This should be a perfect match
-            assert_eq!(alignment.identity(), 1.0,
-                      "Self-alignment should have 100% identity");
+            assert_eq!(
+                alignment.identity(),
+                1.0,
+                "Self-alignment should have 100% identity"
+            );
             found_perfect = true;
         }
     }
 
-    assert!(found_perfect, "Should find at least one perfect self-alignment");
+    assert!(
+        found_perfect,
+        "Should find at least one perfect self-alignment"
+    );
 
     Ok(())
 }
@@ -294,8 +348,11 @@ fn test_large_sequence_handling() -> Result<()> {
 
     // Create a larger sequence (10kb)
     let mut large_seq = String::from(">large\n");
-    for _ in 0..125 {  // 125 * 80 = 10,000 bp
-        large_seq.push_str("ACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGT");
+    for _ in 0..125 {
+        // 125 * 80 = 10,000 bp
+        large_seq.push_str(
+            "ACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGT",
+        );
     }
     large_seq.push('\n');
 
@@ -306,10 +363,16 @@ fn test_large_sequence_handling() -> Result<()> {
     let aligner = FastGA::new(Config::default())?;
     let result = aligner.align_files(&seq_path, &seq_path);
 
-    assert!(result.is_ok(), "Should handle large sequences without error");
+    assert!(
+        result.is_ok(),
+        "Should handle large sequences without error"
+    );
 
     if let Ok(alignments) = result {
-        println!("Large sequence (10kb) produced {} alignments", alignments.len());
+        println!(
+            "Large sequence (10kb) produced {} alignments",
+            alignments.len()
+        );
     }
 
     Ok(())
@@ -335,11 +398,19 @@ fn test_empty_file_handling() -> Result<()> {
 
     // These might error or return empty alignments, both are acceptable
     if let Ok(alignments) = result1 {
-        assert_eq!(alignments.len(), 0, "Empty file should produce no alignments");
+        assert_eq!(
+            alignments.len(),
+            0,
+            "Empty file should produce no alignments"
+        );
     }
 
     if let Ok(alignments) = result2 {
-        assert_eq!(alignments.len(), 0, "Empty file should produce no alignments");
+        assert_eq!(
+            alignments.len(),
+            0,
+            "Empty file should produce no alignments"
+        );
     }
 
     Ok(())
@@ -369,15 +440,29 @@ fn test_multithreading_performance() -> Result<()> {
     let duration_multi = start_multi.elapsed();
 
     // Both should produce same number of alignments
-    assert_eq!(alignments_1.len(), alignments_multi.len(),
-              "Thread count shouldn't affect alignment count");
+    assert_eq!(
+        alignments_1.len(),
+        alignments_multi.len(),
+        "Thread count shouldn't affect alignment count"
+    );
 
-    println!("1 thread: {:?}, {} alignments", duration_1, alignments_1.len());
-    println!("4 threads: {:?}, {} alignments", duration_multi, alignments_multi.len());
+    println!(
+        "1 thread: {:?}, {} alignments",
+        duration_1,
+        alignments_1.len()
+    );
+    println!(
+        "4 threads: {:?}, {} alignments",
+        duration_multi,
+        alignments_multi.len()
+    );
 
     // Multi-threaded might be faster (though not guaranteed for small inputs)
     if alignments_1.len() > 10 {
-        println!("Speedup: {:.2}x", duration_1.as_secs_f64() / duration_multi.as_secs_f64());
+        println!(
+            "Speedup: {:.2}x",
+            duration_1.as_secs_f64() / duration_multi.as_secs_f64()
+        );
     }
 
     Ok(())

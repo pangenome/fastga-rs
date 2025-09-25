@@ -1,9 +1,8 @@
+use anyhow::Result;
+use fastga_rs::{Config, FastGA};
 /// Test that FastGA processes queries sequentially and completely
 /// This is critical for our streaming API assumptions!
-
 use std::process::Command;
-use anyhow::Result;
-use fastga_rs::{FastGA, Config};
 
 #[test]
 fn test_fastga_processes_queries_sequentially() -> Result<()> {
@@ -12,18 +11,20 @@ fn test_fastga_processes_queries_sequentially() -> Result<()> {
 
     // Queries with unique sequences that will align differently
     let queries_fasta = temp_dir.path().join("queries.fa");
-    std::fs::write(&queries_fasta,
+    std::fs::write(
+        &queries_fasta,
         ">query_A\n\
          ACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGT\n\
          >query_B\n\
          TGCATGCATGCATGCATGCATGCATGCATGCATGCATGCATGCATGCATGCATGCATGCATGCATGCATGCATGCATGCA\n\
          >query_C\n\
-         AAAATTTTCCCCGGGGAAAATTTTCCCCGGGGAAAATTTTCCCCGGGGAAAATTTTCCCCGGGGAAAATTTTCCCCGGGG\n"
+         AAAATTTTCCCCGGGGAAAATTTTCCCCGGGGAAAATTTTCCCCGGGGAAAATTTTCCCCGGGGAAAATTTTCCCCGGGG\n",
     )?;
 
     // Target with sequences that match each query differently
     let target_fasta = temp_dir.path().join("target.fa");
-    std::fs::write(&target_fasta,
+    std::fs::write(
+        &target_fasta,
         ">target_1_matches_A\n\
          ACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGT\n\
          >target_2_matches_B\n\
@@ -31,7 +32,7 @@ fn test_fastga_processes_queries_sequentially() -> Result<()> {
          >target_3_matches_C\n\
          AAAATTTTCCCCGGGGAAAATTTTCCCCGGGGAAAATTTTCCCCGGGGAAAATTTTCCCCGGGGAAAATTTTCCCCGGGG\n\
          >target_4_mixed\n\
-         ACGTACGTTGCATGCAAAAATTTTCCCCGGGGACGTACGTTGCATGCAAAAATTTTCCCCGGGGACGTACGTTGCATGCA\n"
+         ACGTACGTTGCATGCAAAAATTTTCCCCGGGGACGTACGTTGCATGCAAAAATTTTCCCCGGGGACGTACGTTGCATGCA\n",
     )?;
 
     // Convert to GDB - FAtoGDB syntax is: FAtoGDB <input.fa> <output_name>
@@ -45,7 +46,10 @@ fn test_fastga_processes_queries_sequentially() -> Result<()> {
         .output()?;
 
     if !fa_output.status.success() {
-        eprintln!("FAtoGDB failed for queries: {}", String::from_utf8_lossy(&fa_output.stderr));
+        eprintln!(
+            "FAtoGDB failed for queries: {}",
+            String::from_utf8_lossy(&fa_output.stderr)
+        );
     }
 
     let fa_output2 = Command::new("deps/fastga/FAtoGDB")
@@ -54,7 +58,10 @@ fn test_fastga_processes_queries_sequentially() -> Result<()> {
         .output()?;
 
     if !fa_output2.status.success() {
-        eprintln!("FAtoGDB failed for target: {}", String::from_utf8_lossy(&fa_output2.stderr));
+        eprintln!(
+            "FAtoGDB failed for target: {}",
+            String::from_utf8_lossy(&fa_output2.stderr)
+        );
     }
 
     // List what files were created
@@ -66,10 +73,10 @@ fn test_fastga_processes_queries_sequentially() -> Result<()> {
 
     // Run FastGA
     let output = Command::new("deps/fastga/FastGA")
-        .arg("-T1")  // Single thread to ensure deterministic order
-        .arg("-pafx")  // PAF with extended CIGAR
-        .arg(&query_gdb_base)  // Will look for queries.gdb
-        .arg(&target_gdb_base)  // Will look for target.gdb
+        .arg("-T1") // Single thread to ensure deterministic order
+        .arg("-pafx") // PAF with extended CIGAR
+        .arg(&query_gdb_base) // Will look for queries.gdb
+        .arg(&target_gdb_base) // Will look for target.gdb
         .output()?;
 
     // Debug output
@@ -104,8 +111,11 @@ fn test_fastga_processes_queries_sequentially() -> Result<()> {
     }
 
     // CRITICAL TEST: Queries must appear in order with no interleaving
-    assert_eq!(query_order, vec!["query_A", "query_B", "query_C"],
-               "FastGA must process queries sequentially!");
+    assert_eq!(
+        query_order,
+        vec!["query_A", "query_B", "query_C"],
+        "FastGA must process queries sequentially!"
+    );
 
     // Count alignments per query
     let mut query_a_lines = Vec::new();
@@ -124,12 +134,16 @@ fn test_fastga_processes_queries_sequentially() -> Result<()> {
 
     // Verify no interleaving: All query_A lines come before query_B, etc.
     if !query_a_lines.is_empty() && !query_b_lines.is_empty() {
-        assert!(*query_a_lines.last().unwrap() < *query_b_lines.first().unwrap(),
-                "Query A alignments must complete before Query B starts");
+        assert!(
+            *query_a_lines.last().unwrap() < *query_b_lines.first().unwrap(),
+            "Query A alignments must complete before Query B starts"
+        );
     }
     if !query_b_lines.is_empty() && !query_c_lines.is_empty() {
-        assert!(*query_b_lines.last().unwrap() < *query_c_lines.first().unwrap(),
-                "Query B alignments must complete before Query C starts");
+        assert!(
+            *query_b_lines.last().unwrap() < *query_c_lines.first().unwrap(),
+            "Query B alignments must complete before Query C starts"
+        );
     }
 
     println!("\n✓ FastGA processes queries sequentially:");
@@ -147,16 +161,18 @@ fn test_query_completeness_with_multiple_targets() -> Result<()> {
 
     // One query that should match multiple targets
     let queries_fasta = temp_dir.path().join("queries.fa");
-    std::fs::write(&queries_fasta,
+    std::fs::write(
+        &queries_fasta,
         ">query_1\n\
          ACGTACGTACGTACGT\n\
          >query_2\n\
-         TGCATGCATGCATGCA\n"
+         TGCATGCATGCATGCA\n",
     )?;
 
     // Multiple targets with partial matches to query_1
     let target_fasta = temp_dir.path().join("target.fa");
-    std::fs::write(&target_fasta,
+    std::fs::write(
+        &target_fasta,
         ">target_A\n\
          ACGTACGTACGTACGT\n\
          >target_B\n\
@@ -166,7 +182,7 @@ fn test_query_completeness_with_multiple_targets() -> Result<()> {
          >target_D_no_match\n\
          TTTTTTTTTTTTTTTTTTTTTTTT\n\
          >target_E\n\
-         TGCATGCATGCATGCA\n"
+         TGCATGCATGCATGCA\n",
     )?;
 
     // Convert and run
@@ -186,7 +202,7 @@ fn test_query_completeness_with_multiple_targets() -> Result<()> {
     let output = Command::new("deps/fastga/FastGA")
         .arg("-T1")
         .arg("-pafx")
-        .arg("-l50")  // Lower min length for test
+        .arg("-l50") // Lower min length for test
         .arg(&query_gdb_base)
         .arg(&target_gdb_base)
         .output()?;
@@ -213,13 +229,17 @@ fn test_query_completeness_with_multiple_targets() -> Result<()> {
 
         if query == "query_1" {
             query_1_targets.push(target);
-            assert!(current_query.is_empty() || current_query == "query_1",
-                    "Query 1 alignments must not be interrupted");
+            assert!(
+                current_query.is_empty() || current_query == "query_1",
+                "Query 1 alignments must not be interrupted"
+            );
             current_query = "query_1".to_string();
         } else if query == "query_2" {
             query_2_targets.push(target);
-            assert!(current_query == "query_1" || current_query == "query_2",
-                    "Query 2 must come after Query 1");
+            assert!(
+                current_query == "query_1" || current_query == "query_2",
+                "Query 2 must come after Query 1"
+            );
             current_query = "query_2".to_string();
         }
     }
@@ -252,10 +272,10 @@ fn test_parallel_threads_still_sequential_queries() -> Result<()> {
 
     // Run with 8 threads
     let output = Command::new("deps/fastga/FastGA")
-        .arg("-T8")  // Multiple threads
+        .arg("-T8") // Multiple threads
         .arg("-pafx")
         .arg(&queries_fasta)
-        .arg(&queries_fasta)  // Self-alignment
+        .arg(&queries_fasta) // Self-alignment
         .output()?;
 
     let paf = String::from_utf8(output.stdout)?;
@@ -274,8 +294,12 @@ fn test_parallel_threads_still_sequential_queries() -> Result<()> {
 
         if let Some(num_str) = fields[0].strip_prefix("query_") {
             let num: i32 = num_str.parse()?;
-            assert!(num >= last_query_num,
-                    "Query {} appeared after query {}", num, last_query_num);
+            assert!(
+                num >= last_query_num,
+                "Query {} appeared after query {}",
+                num,
+                last_query_num
+            );
             last_query_num = num;
         }
     }

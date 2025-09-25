@@ -3,11 +3,11 @@
 //! This example shows various ways to use the streaming API to process
 //! alignments efficiently without storing them all in memory.
 
-use fastga_rs::{Config, Alignment};
-use fastga_rs::streaming::{StreamingAligner, BestHitFilter, align_streaming_simple};
+use anyhow::Result;
+use fastga_rs::streaming::{align_streaming_simple, BestHitFilter, StreamingAligner};
+use fastga_rs::{Alignment, Config};
 use std::collections::HashMap;
 use std::path::Path;
-use anyhow::Result;
 
 fn main() -> Result<()> {
     println!("FastGA Streaming API Examples\n");
@@ -50,26 +50,23 @@ fn example_simple_streaming(genome1: &Path, genome2: &Path) -> Result<()> {
     let mut alignment_count = 0;
     let mut total_bases = 0;
 
-    let stats = align_streaming_simple(
-        genome1,
-        genome2,
-        |alignment| {
-            alignment_count += 1;
-            total_bases += alignment.query_end - alignment.query_start;
+    let stats = align_streaming_simple(genome1, genome2, |alignment| {
+        alignment_count += 1;
+        total_bases += alignment.query_end - alignment.query_start;
 
-            // Process first 5 alignments
-            if alignment_count <= 5 {
-                println!("Alignment {}: {} -> {} ({:.1}% identity)",
-                    alignment_count,
-                    alignment.query_name,
-                    alignment.target_name,
-                    alignment.identity() * 100.0
-                );
-            }
-
-            true  // Keep all alignments
+        // Process first 5 alignments
+        if alignment_count <= 5 {
+            println!(
+                "Alignment {}: {} -> {} ({:.1}% identity)",
+                alignment_count,
+                alignment.query_name,
+                alignment.target_name,
+                alignment.identity() * 100.0
+            );
         }
-    )?;
+
+        true // Keep all alignments
+    })?;
 
     println!("\nProcessed {} alignments", stats.total_alignments);
     println!("Total aligned bases: {}", total_bases);
@@ -90,20 +87,15 @@ fn example_filtering(genome1: &Path, genome2: &Path) -> Result<()> {
         .filter_min_length(100)
         .filter(|aln| {
             // Custom filter: exclude self-alignments
-            !(aln.query_name == aln.target_name &&
-              aln.query_start == aln.target_start)
+            !(aln.query_name == aln.target_name && aln.query_start == aln.target_start)
         });
 
     let mut high_quality = Vec::new();
 
-    let stats = aligner.align_files(
-        genome1,
-        genome2,
-        |alignment| {
-            high_quality.push(alignment.clone());
-            true
-        }
-    )?;
+    let stats = aligner.align_files(genome1, genome2, |alignment| {
+        high_quality.push(alignment.clone());
+        true
+    })?;
 
     println!("Total alignments: {}", stats.total_alignments);
     println!("After filtering: {}", high_quality.len());
@@ -127,21 +119,18 @@ fn example_best_hits(genome1: &Path, genome2: &Path) -> Result<()> {
 
     let mut best_filter = BestHitFilter::new();
 
-    align_streaming_simple(
-        genome1,
-        genome2,
-        |alignment| {
-            best_filter.process(alignment);
-            true
-        }
-    )?;
+    align_streaming_simple(genome1, genome2, |alignment| {
+        best_filter.process(alignment);
+        true
+    })?;
 
     let best_alignments = best_filter.into_alignments();
 
     println!("Found best hits for {} queries", best_alignments.len());
 
     for aln in best_alignments.iter().take(5) {
-        println!("Best hit for {}: {} ({:.2}% identity)",
+        println!(
+            "Best hit for {}: {} ({:.2}% identity)",
             aln.query_name,
             aln.target_name,
             aln.identity() * 100.0
@@ -158,7 +147,7 @@ fn example_statistics(genome1: &Path, genome2: &Path) -> Result<()> {
 
     use std::sync::{Arc, Mutex};
 
-    let identity_histogram = Arc::new(Mutex::new(vec![0; 11]));  // 0-10%, 10-20%, ..., 90-100%
+    let identity_histogram = Arc::new(Mutex::new(vec![0; 11])); // 0-10%, 10-20%, ..., 90-100%
     let length_distribution = Arc::new(Mutex::new(HashMap::new()));
     let query_counts = Arc::new(Mutex::new(HashMap::new()));
 
@@ -189,7 +178,7 @@ fn example_statistics(genome1: &Path, genome2: &Path) -> Result<()> {
     let stats = aligner.align_files(
         genome1,
         genome2,
-        |_| true  // Keep all
+        |_| true, // Keep all
     )?;
 
     println!("Processed {} alignments\n", stats.total_alignments);
@@ -240,22 +229,22 @@ fn example_query_vs_all(target_file: &Path) -> Result<()> {
         Config::builder()
             .min_alignment_length(50)
             .min_identity(0.8)
-            .build()
+            .build(),
     );
 
-    let alignments = aligner.align_query_vs_all(
-        query,
-        target_file,
-        |alignment| {
-            println!("Found alignment to {}: {:.1}% identity",
-                alignment.target_name,
-                alignment.identity() * 100.0
-            );
-            alignment.identity() > 0.85  // Keep high-identity hits
-        }
-    )?;
+    let alignments = aligner.align_query_vs_all(query, target_file, |alignment| {
+        println!(
+            "Found alignment to {}: {:.1}% identity",
+            alignment.target_name,
+            alignment.identity() * 100.0
+        );
+        alignment.identity() > 0.85 // Keep high-identity hits
+    })?;
 
-    println!("\nQuery aligned to {} targets with >85% identity", alignments.len());
+    println!(
+        "\nQuery aligned to {} targets with >85% identity",
+        alignments.len()
+    );
     println!();
 
     Ok(())
@@ -272,14 +261,12 @@ fn example_stream_to_file(genome1: &Path, genome2: &Path) -> Result<()> {
     let file = File::create(output_file)?;
     let writer = BufWriter::new(file);
 
-    let stats = fastga_rs::streaming::stream_to_paf(
-        genome1,
-        genome2,
-        Config::default(),
-        writer
-    )?;
+    let stats = fastga_rs::streaming::stream_to_paf(genome1, genome2, Config::default(), writer)?;
 
-    println!("Streamed {} alignments to {}", stats.kept_alignments, output_file);
+    println!(
+        "Streamed {} alignments to {}",
+        stats.kept_alignments, output_file
+    );
 
     // Show file size
     let metadata = std::fs::metadata(output_file)?;

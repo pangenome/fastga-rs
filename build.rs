@@ -1,11 +1,8 @@
-/// Build script for embedding FastGA directly into our Rust binary.
+/// Build script for compiling FastGA as a static library.
 ///
-/// This compiles FastGA and embeds the binaries as static resources,
-/// so users get a single self-contained Rust binary with no external dependencies.
-
+/// This compiles FastGA's C code and links it directly into our Rust binary.
 use std::env;
-use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::path::PathBuf;
 
 fn main() {
     println!("cargo:rerun-if-changed=build.rs");
@@ -13,72 +10,108 @@ fn main() {
 
     let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap());
     let manifest_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap());
-
-    // Step 1: Build FastGA binaries
-    println!("Building FastGA binaries...");
-
     let fastga_dir = manifest_dir.join("deps").join("fastga");
 
-    // Run make in FastGA directory
-    let make_status = Command::new("make")
-        .current_dir(&fastga_dir)
-        .args(&["FastGA", "ALNtoPAF", "FAtoGDB", "-j4"])
-        .status()
-        .expect("Failed to build FastGA");
+    // Compile FastGA as a static library
+    println!("cargo:warning=Building FastGA as static library...");
 
-    if !make_status.success() {
-        panic!("Failed to compile FastGA binaries");
-    }
-
-    // Step 2: Copy binaries to OUT_DIR
-    let binaries = ["FastGA", "ALNtoPAF", "FAtoGDB"];
-    for binary in &binaries {
-        let src = fastga_dir.join(binary);
-        let dst = out_dir.join(binary);
-
-        if src.exists() {
-            std::fs::copy(&src, &dst)
-                .expect(&format!("Failed to copy {} binary", binary));
-            println!("cargo:warning=Copied {} to OUT_DIR", binary);
-        }
-    }
-
-    // Step 3: Tell Rust to embed these binaries
-    println!("cargo:rustc-env=FASTGA_BINARY={}", out_dir.join("FastGA").display());
-    println!("cargo:rustc-env=ALNTOPAF_BINARY={}", out_dir.join("ALNtoPAF").display());
-    println!("cargo:rustc-env=FATOGDB_BINARY={}", out_dir.join("FAtoGDB").display());
-
-    // Step 4: Also compile FastGA as a library (optional, for FFI approach)
-    let core_sources = vec![
-        "deps/fastga/FastGA.c",
-        "deps/fastga/align.c",
-        "deps/fastga/alncode.c",
-        "deps/fastga/GDB.c",
-        "deps/fastga/gene_core.c",
-        "deps/fastga/libfastk.c",
-        "deps/fastga/ONElib.c",
-        "deps/fastga/RSDsort.c",
-        "deps/fastga/MSDsort.c",
-        "deps/fastga/hash.c",
-        "deps/fastga/select.c",
-        "deps/fastga/ALNtoPAF.c",
-    ];
-
-    let mut build = cc::Build::new();
-    build
-        .files(&core_sources)
-        .include("deps/fastga")
+    // We need to compile each program separately to avoid redefining main multiple times
+    // First compile FastGA with main renamed
+    let mut fastga_build = cc::Build::new();
+    fastga_build
+        .file(fastga_dir.join("FastGA.c"))
+        .define("main", "fastga_main")
+        .file(fastga_dir.join("align.c"))
+        .file(fastga_dir.join("alncode.c"))
+        .file(fastga_dir.join("RSDsort.c"))
+        .include(&fastga_dir)
         .flag("-O3")
         .flag("-fno-strict-aliasing")
         .warnings(false)
-        .define("HAVE_PTHREAD", None);
+        .define("_GNU_SOURCE", None)
+        .compile("fastga_main");
 
-    // Required system libraries
+    // Compile FAtoGDB with main renamed
+    let mut fatogdb_build = cc::Build::new();
+    fatogdb_build
+        .file(fastga_dir.join("FAtoGDB.c"))
+        .define("main", "fatogdb_main")
+        .include(&fastga_dir)
+        .flag("-O3")
+        .flag("-fno-strict-aliasing")
+        .warnings(false)
+        .define("_GNU_SOURCE", None)
+        .compile("fatogdb_main");
+
+    // Compile GIXmake with main renamed
+    let mut gixmake_build = cc::Build::new();
+    gixmake_build
+        .file(fastga_dir.join("GIXmake.c"))
+        .define("main", "gixmake_main")
+        .file(fastga_dir.join("MSDsort.c"))
+        .include(&fastga_dir)
+        .flag("-O3")
+        .flag("-fno-strict-aliasing")
+        .warnings(false)
+        .define("_GNU_SOURCE", None)
+        .compile("gixmake_main");
+
+    // Compile common dependencies
+    let mut common_build = cc::Build::new();
+    common_build
+        .file(fastga_dir.join("GDB.c"))
+        .file(fastga_dir.join("gene_core.c"))
+        .file(fastga_dir.join("libfastk.c"))
+        .file(fastga_dir.join("ONElib.c"))
+        .file(fastga_dir.join("hash.c"))
+        .file(fastga_dir.join("select.c"))
+        .include(&fastga_dir)
+        .flag("-O3")
+        .flag("-fno-strict-aliasing")
+        .warnings(false)
+        .define("_GNU_SOURCE", None)
+        .compile("fastga_common");
+
+    // Link required system libraries
     println!("cargo:rustc-link-lib=pthread");
     println!("cargo:rustc-link-lib=m");
     println!("cargo:rustc-link-lib=z");
 
-    build.compile("fastga");
+    // Also build the utility programs as separate binaries
+    // FastGA's system() calls need these
+    use std::process::Command;
 
-    println!("cargo:rustc-link-search=native={}", out_dir.display());
+    let utilities = ["FAtoGDB", "GIXmake", "GIXrm", "ALNtoPAF"];
+
+    println!("cargo:warning=Building FastGA utilities...");
+
+    for utility in &utilities {
+        let status = Command::new("make")
+            .current_dir(&fastga_dir)
+            .arg(utility)
+            .status()
+            .unwrap_or_else(|_| panic!("Failed to build {utility}"));
+
+        if !status.success() {
+            panic!("Failed to build {utility}");
+        }
+
+        // Copy to OUT_DIR so FastGA can find them
+        let src = fastga_dir.join(utility);
+        let dst = out_dir.join(utility);
+        if src.exists() {
+            std::fs::copy(&src, &dst).expect(&format!("Failed to copy {} to OUT_DIR", utility));
+
+            // Make executable
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                let mut perms = std::fs::metadata(&dst).unwrap().permissions();
+                perms.set_mode(0o755);
+                std::fs::set_permissions(&dst, perms).unwrap();
+            }
+        }
+    }
+
+    println!("cargo:rustc-env=FASTGA_BIN_DIR={}", out_dir.display());
 }

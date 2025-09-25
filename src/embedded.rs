@@ -1,97 +1,75 @@
-//! Embedded FastGA binary management.
+//! FastGA binary management.
 //!
-//! This module handles the FastGA binaries that are compiled and embedded
-//! directly into our Rust binary, providing a self-contained solution.
+//! This module handles the FastGA binaries that are built from source
+//! during the cargo build process.
 
-use std::fs;
-use std::io::Write;
-use std::path::{Path, PathBuf};
+use crate::error::{FastGAError, Result};
+use std::env;
+use std::path::PathBuf;
 use std::process::{Command, Stdio};
-use std::sync::Once;
-use tempfile::TempDir;
-use crate::error::{Result, FastGAError};
 
-// Include the compiled FastGA binaries as bytes
-const FASTGA_BINARY: &[u8] = include_bytes!(env!("FASTGA_BINARY"));
-const ALNTOPAF_BINARY: &[u8] = include_bytes!(env!("ALNTOPAF_BINARY"));
-const FATOGDB_BINARY: &[u8] = include_bytes!(env!("FATOGDB_BINARY"));
+/// Get the path to a FastGA binary.
+///
+/// The binaries are built during cargo build and placed in OUT_DIR.
+pub fn get_binary_path(binary_name: &str) -> Result<PathBuf> {
+    // During build, binaries are in OUT_DIR
+    if let Ok(out_dir) = env::var("OUT_DIR") {
+        let path = PathBuf::from(out_dir).join(binary_name);
+        if path.exists() {
+            return Ok(path);
+        }
+    }
 
-static INIT: Once = Once::new();
-static mut BINARY_DIR: Option<PathBuf> = None;
+    // For development, also check target/debug and target/release
+    let manifest_dir = env::var("CARGO_MANIFEST_DIR").unwrap_or_else(|_| ".".to_string());
 
-/// Container for extracted FastGA binaries
-pub struct EmbeddedFastGA {
-    temp_dir: Option<TempDir>,
-    fastga_path: PathBuf,
-    alntopaf_path: PathBuf,
-    fatogdb_path: PathBuf,
+    // Check debug build
+    let debug_path = PathBuf::from(&manifest_dir)
+        .join("target/debug/fastga_bins")
+        .join(binary_name);
+    if debug_path.exists() {
+        return Ok(debug_path);
+    }
+
+    // Check release build
+    let release_path = PathBuf::from(&manifest_dir)
+        .join("target/release/fastga_bins")
+        .join(binary_name);
+    if release_path.exists() {
+        return Ok(release_path);
+    }
+
+    // Last resort: check if it's in PATH
+    if let Ok(output) = Command::new("which").arg(binary_name).output() {
+        if output.status.success() {
+            let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            return Ok(PathBuf::from(path));
+        }
+    }
+
+    Err(FastGAError::Other(format!(
+        "FastGA binary '{}' not found. Please run 'cargo build' first.",
+        binary_name
+    )))
 }
 
-impl EmbeddedFastGA {
-    /// Initialize embedded FastGA binaries.
-    ///
-    /// This extracts the embedded binaries to a temporary directory
-    /// and makes them executable.
+/// Container for FastGA binary paths
+pub struct FastGABinaries {
+    pub fastga_path: PathBuf,
+    pub alntopaf_path: PathBuf,
+    pub fatogdb_path: PathBuf,
+    pub gixmake_path: PathBuf,
+}
+
+impl FastGABinaries {
+    /// Get paths to all FastGA binaries.
     pub fn new() -> Result<Self> {
-        // Create temporary directory for binaries
-        let temp_dir = TempDir::new()
-            .map_err(|e| FastGAError::Other(format!("Failed to create temp dir: {}", e)))?;
-
-        let dir_path = temp_dir.path();
-
-        // Extract FastGA binary
-        let fastga_path = dir_path.join("FastGA");
-        Self::extract_binary(FASTGA_BINARY, &fastga_path)?;
-
-        // Extract ALNtoPAF binary
-        let alntopaf_path = dir_path.join("ALNtoPAF");
-        Self::extract_binary(ALNTOPAF_BINARY, &alntopaf_path)?;
-
-        // Extract FAtoGDB binary
-        let fatogdb_path = dir_path.join("FAtoGDB");
-        Self::extract_binary(FATOGDB_BINARY, &fatogdb_path)?;
-
-        Ok(EmbeddedFastGA {
-            temp_dir: Some(temp_dir),
-            fastga_path,
-            alntopaf_path,
-            fatogdb_path,
+        Ok(FastGABinaries {
+            fastga_path: get_binary_path("FastGA")?,
+            alntopaf_path: get_binary_path("ALNtoPAF")?,
+            fatogdb_path: get_binary_path("FAtoGDB")?,
+            gixmake_path: get_binary_path("GIXmake")?,
         })
-    }
-
-    /// Extract a binary from embedded bytes to a file.
-    fn extract_binary(binary_data: &[u8], path: &Path) -> Result<()> {
-        let mut file = fs::File::create(path)
-            .map_err(|e| FastGAError::Other(format!("Failed to create binary file: {}", e)))?;
-
-        file.write_all(binary_data)
-            .map_err(|e| FastGAError::Other(format!("Failed to write binary: {}", e)))?;
-
-        // Make executable on Unix
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            let mut perms = fs::metadata(path)?.permissions();
-            perms.set_mode(0o755);
-            fs::set_permissions(path, perms)?;
-        }
-
-        Ok(())
-    }
-
-    /// Get path to the FastGA binary.
-    pub fn fastga_path(&self) -> &Path {
-        &self.fastga_path
-    }
-
-    /// Get path to the ALNtoPAF binary.
-    pub fn alntopaf_path(&self) -> &Path {
-        &self.alntopaf_path
-    }
-
-    /// Get path to the FAtoGDB binary.
-    pub fn fatogdb_path(&self) -> &Path {
-        &self.fatogdb_path
     }
 
     /// Run FastGA with the given arguments.
@@ -123,7 +101,9 @@ impl EmbeddedFastGA {
             .spawn()
             .map_err(|e| FastGAError::Other(format!("Failed to spawn FastGA: {}", e)))?;
 
-        let stdout = child.stdout.take()
+        let stdout = child
+            .stdout
+            .take()
             .ok_or_else(|| FastGAError::Other("Failed to capture stdout".to_string()))?;
 
         let reader = BufReader::new(stdout);
@@ -135,47 +115,80 @@ impl EmbeddedFastGA {
             }
         }
 
-        let status = child.wait()
+        let status = child
+            .wait()
             .map_err(|e| FastGAError::Other(format!("Failed to wait for FastGA: {}", e)))?;
 
         if !status.success() {
-            return Err(FastGAError::FastGAExecutionFailed(
-                format!("FastGA exited with status: {}", status)
-            ));
+            return Err(FastGAError::FastGAExecutionFailed(format!(
+                "FastGA exited with status: {}",
+                status
+            )));
         }
 
         Ok(())
     }
 }
 
-/// Global singleton instance of embedded FastGA.
-///
-/// This ensures we only extract the binaries once per process.
-pub fn get_embedded_fastga() -> Result<&'static EmbeddedFastGA> {
-    static mut INSTANCE: Option<EmbeddedFastGA> = None;
+/// Run FastGA with the given arguments.
+pub fn run_fastga(args: &[&str]) -> Result<String> {
+    let fastga_path = get_binary_path("FastGA")?;
 
-    unsafe {
-        INIT.call_once(|| {
-            match EmbeddedFastGA::new() {
-                Ok(fastga) => {
-                    // Leak the temp directory so it lives for the entire program
-                    let mut leaked = fastga;
-                    let temp_dir = leaked.temp_dir.take();
-                    if let Some(dir) = temp_dir {
-                        // This prevents the temp directory from being deleted
-                        std::mem::forget(dir);
-                    }
-                    INSTANCE = Some(leaked);
-                }
-                Err(e) => {
-                    eprintln!("Failed to initialize embedded FastGA: {}", e);
-                }
-            }
-        });
+    let output = Command::new(&fastga_path)
+        .args(args)
+        .output()
+        .map_err(|e| FastGAError::Other(format!("Failed to run FastGA: {}", e)))?;
 
-        INSTANCE.as_ref()
-            .ok_or_else(|| FastGAError::Other("Failed to initialize embedded FastGA".to_string()))
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(FastGAError::FastGAExecutionFailed(stderr.to_string()));
     }
+
+    Ok(String::from_utf8_lossy(&output.stdout).to_string())
+}
+
+/// Run FastGA with streaming output.
+pub fn run_fastga_streaming<F>(args: &[&str], mut callback: F) -> Result<()>
+where
+    F: FnMut(&str) -> bool,
+{
+    use std::io::{BufRead, BufReader};
+
+    let fastga_path = get_binary_path("FastGA")?;
+
+    let mut child = Command::new(&fastga_path)
+        .args(args)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+        .map_err(|e| FastGAError::Other(format!("Failed to spawn FastGA: {}", e)))?;
+
+    let stdout = child
+        .stdout
+        .take()
+        .ok_or_else(|| FastGAError::Other("Failed to capture stdout".to_string()))?;
+
+    let reader = BufReader::new(stdout);
+
+    for line in reader.lines() {
+        let line = line.map_err(|e| FastGAError::IoError(e))?;
+        if !callback(&line) {
+            break;
+        }
+    }
+
+    let status = child
+        .wait()
+        .map_err(|e| FastGAError::Other(format!("Failed to wait for FastGA: {}", e)))?;
+
+    if !status.success() {
+        return Err(FastGAError::FastGAExecutionFailed(format!(
+            "FastGA exited with status: {}",
+            status
+        )));
+    }
+
+    Ok(())
 }
 
 #[cfg(test)]
@@ -183,18 +196,11 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_embedded_extraction() {
-        let fastga = EmbeddedFastGA::new().unwrap();
-        assert!(fastga.fastga_path().exists());
-        assert!(fastga.alntopaf_path().exists());
-        assert!(fastga.fatogdb_path().exists());
-    }
-
-    #[test]
-    fn test_embedded_singleton() {
-        let fastga1 = get_embedded_fastga().unwrap();
-        let fastga2 = get_embedded_fastga().unwrap();
-        // Should be the same instance
-        assert_eq!(fastga1 as *const _, fastga2 as *const _);
+    #[ignore] // Requires built binaries
+    fn test_binary_paths() {
+        let binaries = FastGABinaries::new().unwrap();
+        assert!(binaries.fastga_path.exists());
+        assert!(binaries.alntopaf_path.exists());
+        assert!(binaries.fatogdb_path.exists());
     }
 }

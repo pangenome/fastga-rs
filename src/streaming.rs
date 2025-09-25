@@ -4,10 +4,10 @@
 //! allowing you to filter and process alignments as they are generated without
 //! storing them all in memory or writing intermediate files.
 
+use crate::{Alignment, Config, FastGAError, Result};
+use std::collections::HashMap;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
-use std::collections::HashMap;
-use crate::{Config, Alignment, FastGAError, Result};
 
 /// Builder for configuring streaming alignment operations.
 ///
@@ -108,9 +108,8 @@ impl StreamingAligner {
     where
         F: Fn(&str) -> bool + 'static,
     {
-        self.filters.push(Box::new(move |aln: &Alignment| {
-            predicate(&aln.query_name)
-        }));
+        self.filters
+            .push(Box::new(move |aln: &Alignment| predicate(&aln.query_name)));
         self
     }
 
@@ -119,9 +118,8 @@ impl StreamingAligner {
     where
         F: Fn(&str) -> bool + 'static,
     {
-        self.filters.push(Box::new(move |aln: &Alignment| {
-            predicate(&aln.target_name)
-        }));
+        self.filters
+            .push(Box::new(move |aln: &Alignment| predicate(&aln.target_name)));
         self
     }
 
@@ -135,7 +133,7 @@ impl StreamingAligner {
     }
 
     /// Adds an aggregator that processes each alignment.
-    pub fn aggregate<F>(&mut self, mut processor: F) -> &mut Self
+    pub fn aggregate<F>(&mut self, processor: F) -> &mut Self
     where
         F: FnMut(&Alignment) + 'static,
     {
@@ -153,9 +151,13 @@ impl StreamingAligner {
     where
         F: FnMut(Alignment) -> bool,
     {
-        let genome1_str = genome1.as_ref().to_str()
+        let genome1_str = genome1
+            .as_ref()
+            .to_str()
             .ok_or_else(|| FastGAError::Other("Invalid genome1 path".to_string()))?;
-        let genome2_str = genome2.as_ref().to_str()
+        let genome2_str = genome2
+            .as_ref()
+            .to_str()
             .ok_or_else(|| FastGAError::Other("Invalid genome2 path".to_string()))?;
 
         // Statistics tracking
@@ -169,10 +171,7 @@ impl StreamingAligner {
         // For now, use the non-streaming approach since FFI streaming isn't implemented
         // This will still work but won't have true streaming benefits
         let aligner = crate::FastGA::new(self.config.clone())?;
-        let alignments = aligner.align_files(
-            Path::new(genome1_str),
-            Path::new(genome2_str)
-        )?;
+        let alignments = aligner.align_files(Path::new(genome1_str), Path::new(genome2_str))?;
 
         let stats_clone = Arc::clone(&stats);
 
@@ -182,7 +181,8 @@ impl StreamingAligner {
             stats.total_alignments += 1;
 
             // Update per-query statistics
-            let query_stat = stats.query_stats
+            let query_stat = stats
+                .query_stats
                 .entry(alignment.query_name.clone())
                 .or_default();
             query_stat.alignment_count += 1;
@@ -245,22 +245,20 @@ impl StreamingAligner {
 
         let mut collected = Vec::new();
 
-        let stats = self.align_files(
-            query_file,
-            target_file,
-            |alignment| {
-                if callback(alignment.clone()) {
-                    collected.push(alignment);
-                    true
-                } else {
-                    false
-                }
-            },
-        )?;
+        let stats = self.align_files(query_file, target_file, |alignment| {
+            if callback(alignment.clone()) {
+                collected.push(alignment);
+                true
+            } else {
+                false
+            }
+        })?;
 
-        eprintln!("Query-vs-all: processed {}, kept {} alignments",
-                  stats.total_alignments,
-                  collected.len());
+        eprintln!(
+            "Query-vs-all: processed {}, kept {} alignments",
+            stats.total_alignments,
+            collected.len()
+        );
 
         Ok(collected)
     }
@@ -320,16 +318,11 @@ pub fn stream_to_paf<W: std::io::Write>(
 ) -> Result<StreamingStats> {
     let mut aligner = StreamingAligner::new(config);
 
-    aligner.align_files(
-        genome1,
-        genome2,
-        |alignment| {
-            writeln!(writer, "{}", alignment.to_paf()).ok();
-            true
-        },
-    )
+    aligner.align_files(genome1, genome2, |alignment| {
+        writeln!(writer, "{}", alignment.to_paf()).ok();
+        true
+    })
 }
-
 
 /// Filter alignments by best hit per query.
 ///
@@ -350,7 +343,8 @@ impl BestHitFilter {
 
     /// Processes an alignment, keeping only the best per query.
     pub fn process(&mut self, alignment: Alignment) {
-        let entry = self.best_hits
+        let entry = self
+            .best_hits
             .entry(alignment.query_name.clone())
             .or_insert_with(|| alignment.clone());
 

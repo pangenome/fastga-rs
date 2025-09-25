@@ -1,8 +1,8 @@
 //! Example demonstrating basic FastGA alignment usage.
 
-use fastga_rs::{FastGA, Config};
-use std::path::Path;
 use anyhow::Result;
+use fastga_rs::{Config, FastGA};
+use std::path::Path;
 
 fn main() -> Result<()> {
     // Create aligner with default configuration
@@ -21,9 +21,9 @@ fn main() -> Result<()> {
     // Example 2: Using custom configuration
     println!("\n=== Example 2: Custom configuration ===");
     let config = Config::builder()
-        .min_alignment_length(200)  // Minimum 200bp alignments
-        .min_identity(0.85)         // 85% identity threshold
-        .num_threads(4)             // Use 4 threads
+        .min_alignment_length(200) // Minimum 200bp alignments
+        .min_identity(0.85) // 85% identity threshold
+        .num_threads(4) // Use 4 threads
         .build();
 
     let custom_aligner = FastGA::new(config)?;

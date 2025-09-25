@@ -3,7 +3,7 @@
 //! This module provides structures for representing alignments and converting
 //! between different alignment formats (PAF, PSL, trace points).
 
-use crate::error::{Result, FastGAError};
+use crate::error::{FastGAError, Result};
 use std::fmt;
 
 /// A single local alignment between two sequences.
@@ -112,34 +112,46 @@ impl Alignment {
         let fields: Vec<&str> = line.split('\t').collect();
 
         if fields.len() < 12 {
-            return Err(FastGAError::PafParseError(
-                format!("PAF line has {} fields, expected at least 12", fields.len())
-            ));
+            return Err(FastGAError::PafParseError(format!(
+                "PAF line has {} fields, expected at least 12",
+                fields.len()
+            )));
         }
 
         let mut alignment = Alignment {
             query_name: fields[0].to_string(),
-            query_len: fields[1].parse().map_err(|_|
-                FastGAError::PafParseError("Invalid query length".to_string()))?,
-            query_start: fields[2].parse().map_err(|_|
-                FastGAError::PafParseError("Invalid query start".to_string()))?,
-            query_end: fields[3].parse().map_err(|_|
-                FastGAError::PafParseError("Invalid query end".to_string()))?,
-            strand: fields[4].chars().next().ok_or_else(||
-                FastGAError::PafParseError("Invalid strand".to_string()))?,
+            query_len: fields[1]
+                .parse()
+                .map_err(|_| FastGAError::PafParseError("Invalid query length".to_string()))?,
+            query_start: fields[2]
+                .parse()
+                .map_err(|_| FastGAError::PafParseError("Invalid query start".to_string()))?,
+            query_end: fields[3]
+                .parse()
+                .map_err(|_| FastGAError::PafParseError("Invalid query end".to_string()))?,
+            strand: fields[4]
+                .chars()
+                .next()
+                .ok_or_else(|| FastGAError::PafParseError("Invalid strand".to_string()))?,
             target_name: fields[5].to_string(),
-            target_len: fields[6].parse().map_err(|_|
-                FastGAError::PafParseError("Invalid target length".to_string()))?,
-            target_start: fields[7].parse().map_err(|_|
-                FastGAError::PafParseError("Invalid target start".to_string()))?,
-            target_end: fields[8].parse().map_err(|_|
-                FastGAError::PafParseError("Invalid target end".to_string()))?,
-            matches: fields[9].parse().map_err(|_|
-                FastGAError::PafParseError("Invalid matches".to_string()))?,
-            block_len: fields[10].parse().map_err(|_|
-                FastGAError::PafParseError("Invalid block length".to_string()))?,
-            mapping_quality: fields[11].parse().map_err(|_|
-                FastGAError::PafParseError("Invalid mapping quality".to_string()))?,
+            target_len: fields[6]
+                .parse()
+                .map_err(|_| FastGAError::PafParseError("Invalid target length".to_string()))?,
+            target_start: fields[7]
+                .parse()
+                .map_err(|_| FastGAError::PafParseError("Invalid target start".to_string()))?,
+            target_end: fields[8]
+                .parse()
+                .map_err(|_| FastGAError::PafParseError("Invalid target end".to_string()))?,
+            matches: fields[9]
+                .parse()
+                .map_err(|_| FastGAError::PafParseError("Invalid matches".to_string()))?,
+            block_len: fields[10]
+                .parse()
+                .map_err(|_| FastGAError::PafParseError("Invalid block length".to_string()))?,
+            mapping_quality: fields[11]
+                .parse()
+                .map_err(|_| FastGAError::PafParseError("Invalid mapping quality".to_string()))?,
             cigar: String::new(),
             mismatches: 0,
             gap_opens: 0,
@@ -174,20 +186,22 @@ impl Alignment {
             if ch.is_ascii_digit() {
                 num_str.push(ch);
             } else {
-                let count: usize = num_str.parse().map_err(|_|
-                    FastGAError::CigarParseError("Invalid number in CIGAR".to_string()))?;
+                let count: usize = num_str.parse().map_err(|_| {
+                    FastGAError::CigarParseError("Invalid number in CIGAR".to_string())
+                })?;
                 num_str.clear();
 
                 match ch {
-                    'X' => mismatches += count,  // Mismatch
-                    'I' | 'D' => {  // Insertion or Deletion
+                    'X' => mismatches += count, // Mismatch
+                    'I' | 'D' => {
+                        // Insertion or Deletion
                         gap_len += count;
                         if !in_gap {
                             gap_opens += 1;
                             in_gap = true;
                         }
                     }
-                    '=' | 'M' => in_gap = false,  // Match
+                    '=' | 'M' => in_gap = false, // Match
                     _ => {}
                 }
             }
@@ -231,10 +245,7 @@ impl Alignments {
 
     /// Converts all alignments to PAF format.
     pub fn to_paf(&self) -> Result<String> {
-        let lines: Vec<String> = self.alignments
-            .iter()
-            .map(|a| a.to_paf())
-            .collect();
+        let lines: Vec<String> = self.alignments.iter().map(|a| a.to_paf()).collect();
         Ok(lines.join("\n"))
     }
 
@@ -263,12 +274,14 @@ impl Alignments {
 
     /// Sorts alignments by query position.
     pub fn sort_by_query(&mut self) {
-        self.alignments.sort_by_key(|a| (a.query_name.clone(), a.query_start));
+        self.alignments
+            .sort_by_key(|a| (a.query_name.clone(), a.query_start));
     }
 
     /// Sorts alignments by target position.
     pub fn sort_by_target(&mut self) {
-        self.alignments.sort_by_key(|a| (a.target_name.clone(), a.target_start));
+        self.alignments
+            .sort_by_key(|a| (a.target_name.clone(), a.target_start));
     }
 
     /// Groups alignments by query sequence.
@@ -276,7 +289,8 @@ impl Alignments {
         let mut groups = std::collections::HashMap::new();
 
         for alignment in &self.alignments {
-            groups.entry(alignment.query_name.clone())
+            groups
+                .entry(alignment.query_name.clone())
                 .or_insert_with(Vec::new)
                 .push(alignment);
         }

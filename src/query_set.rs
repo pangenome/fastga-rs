@@ -1,15 +1,14 @@
+use crate::{Alignment, Config};
+use anyhow::Result;
+use std::io::{BufRead, BufReader};
+use std::path::Path;
 /// Query-centric alignment API
 ///
 /// Provides guaranteed complete alignment sets for each query sequence,
 /// with automatic backpressure to prevent memory overflow.
-
 use std::process::{Command, Stdio};
-use std::io::{BufReader, BufRead};
 use std::sync::mpsc::{sync_channel, Receiver};
 use std::thread;
-use std::path::Path;
-use anyhow::Result;
-use crate::{Alignment, Config};
 
 /// A complete set of alignments for a single query sequence.
 ///
@@ -37,13 +36,15 @@ impl QueryAlignmentSet {
 
     /// Get the best alignment by identity score
     pub fn best_by_identity(&self) -> Option<&Alignment> {
-        self.alignments.iter()
+        self.alignments
+            .iter()
             .max_by(|a, b| a.identity().partial_cmp(&b.identity()).unwrap())
     }
 
     /// Filter alignments by minimum identity threshold
     pub fn filter_by_identity(&self, min_identity: f64) -> Vec<&Alignment> {
-        self.alignments.iter()
+        self.alignments
+            .iter()
             .filter(|a| a.identity() >= min_identity)
             .collect()
     }
@@ -51,14 +52,17 @@ impl QueryAlignmentSet {
     /// Get total query coverage (non-overlapping bases)
     pub fn query_coverage(&self) -> usize {
         // Simple approximation - would need interval merging for exact coverage
-        self.alignments.iter()
+        self.alignments
+            .iter()
             .map(|a| a.query_end - a.query_start)
             .sum()
     }
 
     /// Get all unique target sequences hit
     pub fn target_names(&self) -> Vec<String> {
-        let mut targets: Vec<_> = self.alignments.iter()
+        let mut targets: Vec<_> = self
+            .alignments
+            .iter()
             .map(|a| a.target_name.clone())
             .collect();
         targets.sort();
@@ -104,10 +108,13 @@ impl QueryAlignmentIterator {
 
             // Run FastGA
             let mut child = Command::new(crate::embedded::get_binary_path("FastGA")?)
-                .arg("-T").arg(config.num_threads.to_string())
-                .arg("-pafx")  // PAF with extended CIGAR
-                .arg("-l").arg(config.min_alignment_length.to_string())
-                .arg("-i").arg(config.min_identity.to_string())
+                .arg("-T")
+                .arg(config.num_threads.to_string())
+                .arg("-pafx") // PAF with extended CIGAR
+                .arg("-l")
+                .arg(config.min_alignment_length.to_string())
+                .arg("-i")
+                .arg(format!("{:.2}", config.min_identity.unwrap_or(0.7)))
                 .arg(&query_gdb)
                 .arg(&target_gdb)
                 .stdout(Stdio::piped())
@@ -122,7 +129,9 @@ impl QueryAlignmentIterator {
 
             for line in reader.lines() {
                 let line = line?;
-                if line.is_empty() { continue; }
+                if line.is_empty() {
+                    continue;
+                }
 
                 // Parse alignment from PAF line
                 let alignment = match parse_paf_line(&line) {
@@ -191,14 +200,14 @@ pub fn align_queries<F>(
     mut processor: F,
 ) -> Result<()>
 where
-    F: FnMut(QueryAlignmentSet) -> Result<bool>,  // Return false to stop
+    F: FnMut(QueryAlignmentSet) -> Result<bool>, // Return false to stop
 {
     let iter = QueryAlignmentIterator::new(queries, targets, config, 1)?;
 
     for result in iter {
         let set = result?;
         if !processor(set)? {
-            break;  // User requested stop
+            break; // User requested stop
         }
     }
 
@@ -221,11 +230,14 @@ fn parse_paf_line(line: &str) -> Result<Alignment> {
         target_len: fields[6].parse()?,
         target_start: fields[7].parse()?,
         target_end: fields[8].parse()?,
-        residue_matches: fields[9].parse()?,
-        block_length: fields[10].parse()?,
+        matches: fields[9].parse()?,
+        block_len: fields[10].parse()?,
         mapping_quality: fields[11].parse()?,
         cigar: String::new(),
-        ..Default::default()
+        mismatches: 0, // Will be filled from tags if present
+        gap_opens: 0,  // Will be filled from tags if present
+        gap_len: 0,    // Will be filled from tags if present
+        tags: Vec::new(),
     };
 
     // Parse optional tags
