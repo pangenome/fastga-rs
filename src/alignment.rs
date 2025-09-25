@@ -54,6 +54,9 @@ pub struct Alignment {
     /// Extended CIGAR string with '=' and 'X' operators
     pub cigar: String,
 
+    /// Optional PAF tags (everything after column 12)
+    pub tags: Vec<String>,
+
     /// Number of mismatches
     pub mismatches: usize,
 
@@ -63,8 +66,6 @@ pub struct Alignment {
     /// Total gap length
     pub gap_len: usize,
 
-    /// Additional SAM-style tags
-    pub tags: Vec<(String, String)>,
 }
 
 impl Alignment {
@@ -92,8 +93,8 @@ impl Alignment {
 
     /// Formats the alignment as a PAF line.
     pub fn to_paf(&self) -> String {
-        format!(
-            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\tcg:Z:{}",
+        let mut paf = format!(
+            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
             self.query_name,
             self.query_len,
             self.query_start,
@@ -105,9 +106,19 @@ impl Alignment {
             self.target_end,
             self.matches,
             self.block_len,
-            self.mapping_quality,
-            self.cigar
-        )
+            self.mapping_quality
+        );
+
+        // Add all tags (including CIGAR if present)
+        if !self.tags.is_empty() {
+            paf.push('\t');
+            paf.push_str(&self.tags.join("\t"));
+        } else if !self.cigar.is_empty() {
+            // If no tags but we have CIGAR, add it as a tag
+            paf.push_str(&format!("\tcg:Z:{}", self.cigar));
+        }
+
+        paf
     }
 
     /// Parses a PAF line into an Alignment.
@@ -162,16 +173,17 @@ impl Alignment {
             tags: Vec::new(),
         };
 
-        // Parse optional tags
+        // Parse optional tags and preserve them all
+        let mut found_cigar = false;
         for field in &fields[12..] {
-            if let Some((tag, value)) = field.split_once(':') {
-                if tag == "cg" && value.starts_with("Z:") {
-                    alignment.cigar = value[2..].to_string();
-                    alignment.parse_cigar_stats()?;
-                } else {
-                    alignment.tags.push((tag.to_string(), value.to_string()));
-                }
+            if field.starts_with("cg:Z:") {
+                // Extract CIGAR string
+                alignment.cigar = field[5..].to_string();
+                found_cigar = true;
+                alignment.parse_cigar_stats()?;
             }
+            // Always preserve the tag as-is
+            alignment.tags.push(field.to_string());
         }
 
         Ok(alignment)

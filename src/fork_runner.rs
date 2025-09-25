@@ -198,8 +198,12 @@ impl ForkOrchestrator {
         };
 
         // Basic parameters
-        cmd.arg(format!("-T{}", self.config.num_threads))
-           .arg(format!("-l{}", self.config.min_alignment_length));
+        cmd.arg(format!("-T{}", self.config.num_threads));
+
+        // Only add -l if it's > 0 (FastGA's default is 0 anyway)
+        if self.config.min_alignment_length > 0 {
+            cmd.arg(format!("-l{}", self.config.min_alignment_length));
+        }
 
         if let Some(identity) = self.config.min_identity {
             cmd.arg(format!("-i{:.2}", identity));
@@ -275,8 +279,12 @@ impl ForkOrchestrator {
                 OutputFormat::Psl => cmd2.arg("-psl"),
             };
 
-            cmd2.arg(format!("-T{}", self.config.num_threads))
-                .arg(format!("-l{}", self.config.min_alignment_length));
+            cmd2.arg(format!("-T{}", self.config.num_threads));
+
+            // Only add -l if it's > 0 (FastGA's default is 0 anyway)
+            if self.config.min_alignment_length > 0 {
+                cmd2.arg(format!("-l{}", self.config.min_alignment_length));
+            }
 
             if let Some(identity) = self.config.min_identity {
                 cmd2.arg(format!("-i{:.2}", identity));
