@@ -1,5 +1,7 @@
-//! Fork/exec runner for FastGA utilities
-//! This runs each utility in a separate forked process to avoid memory/state issues
+//! Process runner for FastGA binary
+//!
+//! This module handles running the FastGA binary as a subprocess.
+//! The FastGA binary automatically handles GDB conversion and indexing.
 
 use std::ffi::CString;
 use std::os::raw::{c_char, c_int};
@@ -24,7 +26,7 @@ extern "C" {
     fn gixmake_main(argc: c_int, argv: *const *const c_char) -> c_int;
 }
 
-/// Run FAtoGDB in a forked process
+/// Run FAtoGDB in a forked process (DEPRECATED - FastGA handles this automatically)
 pub fn fork_fatogdb(input_path: &Path) -> Result<PathBuf> {
     eprintln!("[Fork] Converting {} to GDB format", input_path.display());
 
@@ -97,7 +99,7 @@ pub fn fork_fatogdb(input_path: &Path) -> Result<PathBuf> {
     }
 }
 
-/// Run GIXmake in a forked process
+/// Run GIXmake in a forked process (DEPRECATED - FastGA handles this automatically)
 pub fn fork_gixmake(gdb_path: &Path, threads: i32, freq: i32) -> Result<PathBuf> {
     eprintln!("[Fork] Creating index for {}", gdb_path.display());
 
@@ -153,7 +155,7 @@ pub fn fork_gixmake(gdb_path: &Path, threads: i32, freq: i32) -> Result<PathBuf>
     }
 }
 
-/// Complete pipeline using fork/exec for each utility
+/// Orchestrator for running FastGA alignments
 pub struct ForkOrchestrator {
     pub config: crate::Config,
 }
@@ -171,21 +173,9 @@ impl ForkOrchestrator {
     }
 
     pub fn align(&self, query_path: &Path, target_path: &Path) -> Result<String> {
-        eprintln!("[Fork] Starting fork-based alignment pipeline");
+        eprintln!("[fastga] Running alignment");
 
-        // Step 1: Convert to GDB using forked process
-        eprintln!("[Fork] Step 1: Converting FASTA files to GDB");
-        let query_gdb = fork_fatogdb(query_path)?;
-        let target_gdb = fork_fatogdb(target_path)?;
-
-        // Step 2: Create indices using forked process
-        eprintln!("[Fork] Step 2: Creating k-mer indices");
-        let _query_gix = fork_gixmake(&query_gdb, self.config.num_threads as i32, self.config.frequency as i32)?;
-        let _target_gix = fork_gixmake(&target_gdb, self.config.num_threads as i32, self.config.frequency as i32)?;
-
-        // Step 3: Run alignment
-        // For alignment, we still need to use the FastGA binary
-        eprintln!("[Fork] Step 3: Running alignment");
+        // FastGA handles everything: FASTA→GDB conversion, index creation, and alignment
         self.run_fastga_alignment(query_path, target_path)
     }
 
@@ -267,16 +257,16 @@ impl ForkOrchestrator {
         cmd.arg(query_path)
            .arg(target_path);
 
-        eprintln!("[Fork] Running FastGA: {cmd:?}");
+        eprintln!("[fastga] Executing: {cmd:?}");
 
         let output = cmd.output()
             .map_err(|e| FastGAError::Other(format!("Failed to run FastGA: {e}")))?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
-            eprintln!("[Fork] FastGA failed with: {}", stderr.trim());
+            eprintln!("[fastga] Failed with: {}", stderr.trim());
             // Try without -g flag
-            eprintln!("[Fork] Trying without -g flag");
+            eprintln!("[fastga] Retrying without -g flag");
 
             let mut cmd2 = Command::new(&fastga);
 

@@ -1,7 +1,7 @@
-//! Fork-based API for FastGA that avoids hanging FFI issues
+//! Process-based API for FastGA that avoids FFI issues
 //!
-//! This provides a drop-in replacement for the standard FastGA API
-//! but uses fork/exec internally to avoid memory corruption and hanging.
+//! This provides a stable API by running FastGA as a subprocess,
+//! avoiding memory corruption and hanging issues from direct FFI.
 
 use crate::{Config, Alignments, Result, FastGAError};
 use crate::fork_runner::ForkOrchestrator;
@@ -9,10 +9,10 @@ use std::path::Path;
 use tempfile::TempDir;
 use std::fs;
 
-/// Fork-based FastGA implementation that avoids FFI hanging issues.
+/// Process-isolated FastGA implementation.
 ///
-/// This is the recommended implementation for integration with SweepGA
-/// as it isolates each utility call in a separate process.
+/// This is the recommended implementation as it runs FastGA
+/// in a separate process, avoiding any FFI-related issues.
 #[derive(Debug, Clone)]
 pub struct ForkFastGA {
     pub config: Config,
@@ -24,16 +24,16 @@ impl ForkFastGA {
         Ok(ForkFastGA { config })
     }
 
-    /// Align two genome files using the fork/exec approach.
+    /// Align two genome files using the FastGA binary.
     ///
-    /// This method:
-    /// 1. Forks child processes to run FAtoGDB for GDB conversion
-    /// 2. Forks child processes to run GIXmake for index creation
-    /// 3. Runs FastGA for the actual alignment
+    /// The FastGA binary handles everything automatically:
+    /// 1. Converts FASTA to GDB format if needed
+    /// 2. Creates k-mer indices if needed
+    /// 3. Performs the alignment
     ///
-    /// Each utility runs in isolation, avoiding memory corruption issues.
+    /// Running as a subprocess avoids FFI memory issues.
     pub fn align_files(&self, genome1: &Path, genome2: &Path) -> Result<Alignments> {
-        eprintln!("[ForkAPI] Starting alignment: {} vs {}",
+        eprintln!("[fastga-rs] Starting alignment: {} vs {}",
                  genome1.display(), genome2.display());
 
         // Validate input files
@@ -52,7 +52,7 @@ impl ForkFastGA {
 
         // Parse PAF output
         if paf_output.is_empty() {
-            eprintln!("[ForkAPI] Warning: Empty alignment output");
+            eprintln!("[fastga-rs] Warning: Empty alignment output");
             return Ok(Alignments::new());
         }
 
@@ -86,7 +86,7 @@ impl ForkFastGA {
     /// # Returns
     /// The number of alignments written
     pub fn align_to_file(&self, genome1: &Path, genome2: &Path, output_path: &Path) -> Result<usize> {
-        eprintln!("[ForkAPI] Aligning and writing to: {}", output_path.display());
+        eprintln!("[fastga-rs] Aligning and writing to: {}", output_path.display());
 
         // Validate input files
         if !genome1.exists() {

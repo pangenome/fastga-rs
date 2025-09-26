@@ -1,11 +1,11 @@
 # FastGA-rs
 
-Rust bindings for [FastGA](https://github.com/thegenemyers/FASTGA), a fast genome aligner. No external dependencies - FastGA is compiled and embedded directly.
+Rust wrapper for [FastGA](https://github.com/thegenemyers/FASTGA), a fast genome aligner. The FastGA binary is compiled and bundled directly - no external dependencies needed.
 
 ## Features
 
-- **Zero external dependencies**: FastGA compiled into your Rust binary
-- **Process isolation**: Fork/exec architecture prevents memory issues
+- **Zero external dependencies**: FastGA binary bundled with your Rust crate
+- **Process isolation**: Subprocess execution prevents memory issues
 - **Extended CIGAR**: '=' for matches, 'X' for mismatches
 - **Streaming API**: Process large datasets without memory overflow
 - **Thread-safe**: Parallel alignment support
@@ -44,26 +44,29 @@ for alignment in alignments.iter() {
 
 ## Architecture
 
-FastGA-rs uses **Rust orchestration with fork/exec isolation**:
+FastGA-rs provides a **Rust wrapper around the FastGA binary**:
 
-1. **Rust API layer** manages configuration and data flow
-2. **Fork/exec wrapper** spawns each FastGA utility in separate process
-3. **Native FastGA binaries** (FAtoGDB, GIXmake, FastGA) compiled from C
+1. **Rust API layer** - Manages configuration, parameters, and output parsing
+2. **Process isolation** - Runs FastGA binary via `std::process::Command`
+3. **Native FastGA binary** - Handles everything: FASTA→GDB conversion, indexing, and alignment
 
-This architecture prevents memory corruption and hanging that occurred with direct FFI.
+This architecture avoids FFI memory issues while providing a clean Rust API.
 
 ### Process Flow
 
 ```
 FASTA files
     ↓
-[Fork: FAtoGDB] → Convert to GDB format
-    ↓
-[Fork: GIXmake] → Build k-mer index
-    ↓
-[Fork: FastGA]  → Perform alignment
+[FastGA binary]
+  • Auto-converts to GDB if needed
+  • Auto-builds indices if needed
+  • Performs alignment
     ↓
 PAF output with extended CIGAR
+    ↓
+[Rust parser]
+  • Structured alignment data
+  • Iterator APIs
 ```
 
 ## Configuration
@@ -93,9 +96,24 @@ let config = Config::builder()
 - `soft_masking`: Handle lowercase (default: false)
 - `keep_intermediates`: Keep temp files (default: false)
 
-## Fork-Based API (Recommended)
+## Iteration and Streaming
 
-For maximum stability, use the fork-based orchestrator:
+### Group by Query
+
+Process alignments grouped by query sequence:
+
+```rust
+let alignments = aligner.align(query, target)?;
+let groups = alignments.group_by_query();
+
+for (query_name, query_alignments) in groups {
+    println!("{}: {} alignments", query_name, query_alignments.len());
+}
+```
+
+### Streaming API
+
+For large-scale alignments, process results without loading everything into memory:
 
 ```rust
 use fastga_rs::fork_runner::ForkOrchestrator;
