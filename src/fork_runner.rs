@@ -28,7 +28,23 @@ extern "C" {
 pub fn fork_fatogdb(input_path: &Path) -> Result<PathBuf> {
     eprintln!("[Fork] Converting {} to GDB format", input_path.display());
 
-    let gdb_path = input_path.with_extension("1gdb");
+    // Handle compressed files: strip .fa.gz or .fasta.gz, not just .gz
+    let gdb_path = if let Some(name) = input_path.file_name() {
+        let name_str = name.to_string_lossy();
+        if name_str.ends_with(".fa.gz") || name_str.ends_with(".fasta.gz") {
+            // Remove .fa.gz or .fasta.gz and add .1gdb
+            let base = if name_str.ends_with(".fa.gz") {
+                &name_str[..name_str.len() - 6]
+            } else {
+                &name_str[..name_str.len() - 9]
+            };
+            input_path.with_file_name(format!("{}.1gdb", base))
+        } else {
+            input_path.with_extension("1gdb")
+        }
+    } else {
+        input_path.with_extension("1gdb")
+    };
 
     // Check if already exists
     if gdb_path.exists() {
