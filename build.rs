@@ -18,6 +18,7 @@ fn main() {
     // Build our wrapper functions
     cc::Build::new()
         .file(fastga_dir.join("rust_wrappers.c"))
+        .file(fastga_dir.join("rust_onelib.c"))
         .file(fastga_dir.join("GDB.c"))
         .file(fastga_dir.join("gene_core.c"))
         .file(fastga_dir.join("ONElib.c"))
