@@ -29,4 +29,16 @@ const char* aln_get_seq_name(void *handle, int64 seq_id, int which_db);
 // Close file
 void aln_close(void *handle);
 
+// === Writing functions ===
+
+// Create new .1aln file for writing
+// gdb1_path and gdb2_path: paths to .1gdb files (sequence metadata)
+void* aln_create(const char *path, const char *gdb1_path, const char *gdb2_path);
+
+// Write an alignment record
+int aln_write_record(void *handle, const AlnRecord *record);
+
+// Close writer (flushes and finalizes file)
+void aln_close_writer(void *handle);
+
 #endif

@@ -28,6 +28,11 @@ extern "C" {
     fn aln_read_record(handle: *mut c_void, record: *mut AlnRecord) -> c_int;
     fn aln_get_seq_name(handle: *mut c_void, seq_id: i64, which_db: c_int) -> *const c_char;
     fn aln_close(handle: *mut c_void);
+
+    // Writer functions
+    fn aln_create(path: *const c_char, gdb1_path: *const c_char, gdb2_path: *const c_char) -> *mut c_void;
+    fn aln_write_record(handle: *mut c_void, record: *const AlnRecord) -> c_int;
+    fn aln_close_writer(handle: *mut c_void);
 }
 
 /// Reader for .1aln alignment files
@@ -154,6 +159,92 @@ impl Drop for AlnReader {
 // SAFETY: AlnReader handle is only used from one thread (not shared)
 // The C library doesn't maintain global state
 unsafe impl Send for AlnReader {}
+
+/// Writer for .1aln alignment files
+pub struct AlnWriter {
+    handle: *mut c_void,
+}
+
+impl AlnWriter {
+    /// Create a new .1aln file for writing
+    ///
+    /// # Arguments
+    /// - `path`: Output .1aln file path
+    /// - `gdb1_path`: Path to query .1gdb file (sequence metadata)
+    /// - `gdb2_path`: Path to target .1gdb file (sequence metadata)
+    ///
+    /// # Example
+    /// ```no_run
+    /// use fastga_rs::AlnWriter;
+    ///
+    /// let mut writer = AlnWriter::create(
+    ///     "output.1aln",
+    ///     "sequences.1gdb",
+    ///     "sequences.1gdb"
+    /// )?;
+    /// # Ok::<(), anyhow::Error>(())
+    /// ```
+    pub fn create(path: &str, gdb1_path: &str, gdb2_path: &str) -> Result<Self> {
+        let c_path = CString::new(path)?;
+        let c_gdb1 = CString::new(gdb1_path)?;
+        let c_gdb2 = CString::new(gdb2_path)?;
+
+        let handle = unsafe {
+            aln_create(c_path.as_ptr(), c_gdb1.as_ptr(), c_gdb2.as_ptr())
+        };
+
+        if handle.is_null() {
+            anyhow::bail!("Failed to create .1aln file: {}", path);
+        }
+
+        Ok(AlnWriter { handle })
+    }
+
+    /// Write an alignment record
+    ///
+    /// # Example
+    /// ```no_run
+    /// use fastga_rs::{AlnWriter, AlnRecord};
+    ///
+    /// let mut writer = AlnWriter::create("out.1aln", "db.1gdb", "db.1gdb")?;
+    ///
+    /// let rec = AlnRecord {
+    ///     query_id: 0,
+    ///     query_start: 0,
+    ///     query_end: 1000,
+    ///     target_id: 1,
+    ///     target_start: 500,
+    ///     target_end: 1500,
+    ///     reverse: 0,
+    ///     diffs: 10,
+    ///     query_len: 5000,
+    ///     target_len: 6000,
+    /// };
+    ///
+    /// writer.write_record(&rec)?;
+    /// # Ok::<(), anyhow::Error>(())
+    /// ```
+    pub fn write_record(&mut self, record: &AlnRecord) -> Result<()> {
+        let result = unsafe { aln_write_record(self.handle, record) };
+
+        if result < 0 {
+            anyhow::bail!("Failed to write alignment record");
+        }
+
+        Ok(())
+    }
+}
+
+impl Drop for AlnWriter {
+    fn drop(&mut self) {
+        if !self.handle.is_null() {
+            unsafe { aln_close_writer(self.handle) };
+        }
+    }
+}
+
+// SAFETY: AlnWriter handle is only used from one thread
+unsafe impl Send for AlnWriter {}
 
 #[cfg(test)]
 mod tests {

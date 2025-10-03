@@ -76,7 +76,7 @@ use error::Result;
 use std::path::Path;
 
 pub use alignment::{Alignment, Alignments};
-pub use aln_reader::{AlnReader, AlnRecord};
+pub use aln_reader::{AlnReader, AlnRecord, AlnWriter};
 pub use config::{Config, OutputFormat};
 pub use error::FastGAError;
 pub use query_set::{align_queries, QueryAlignmentIterator, QueryAlignmentSet};

@@ -183,3 +183,145 @@ void aln_close(void *handle_ptr) {
 
     free(handle);
 }
+
+// === Writer implementation ===
+
+typedef struct {
+    OneFile *of;
+    GDB *gdb1;
+    GDB *gdb2;
+} AlnWriter;
+
+void* aln_create(const char *path, const char *gdb1_path, const char *gdb2_path) {
+    AlnWriter *writer = (AlnWriter*)malloc(sizeof(AlnWriter));
+    if (!writer) return NULL;
+
+    writer->gdb1 = NULL;
+    writer->gdb2 = NULL;
+    writer->of = NULL;
+
+    // Load GDB files for sequence metadata
+    writer->gdb1 = (GDB*)malloc(sizeof(GDB));
+    if (!writer->gdb1) goto error;
+
+    if (Read_GDB(writer->gdb1, (char*)gdb1_path) < 0) {
+        fprintf(stderr, "Failed to read GDB: %s\n", gdb1_path);
+        goto error;
+    }
+
+    // Check if same file for both databases
+    if (strcmp(gdb1_path, gdb2_path) == 0) {
+        writer->gdb2 = writer->gdb1;
+    } else {
+        writer->gdb2 = (GDB*)malloc(sizeof(GDB));
+        if (!writer->gdb2) goto error;
+
+        if (Read_GDB(writer->gdb2, (char*)gdb2_path) < 0) {
+            fprintf(stderr, "Failed to read GDB: %s\n", gdb2_path);
+            goto error;
+        }
+    }
+
+    // Create ONEcode schema and file
+    OneSchema *schema = make_Aln_Schema();
+    if (!schema) {
+        fprintf(stderr, "Failed to create .1aln schema\n");
+        goto error;
+    }
+
+    writer->of = oneFileOpenWriteNew((char*)path, schema, "aln", 1, 1);
+    if (!writer->of) {
+        fprintf(stderr, "Failed to create .1aln file: %s\n", path);
+        oneSchemaDestroy(schema);
+        goto error;
+    }
+
+    // Write provenance
+    oneAddProvenance(writer->of, "sweepga", "0.1.0", "sweepga filter");
+
+    // Write references to GDB files
+    oneAddReference(writer->of, (char*)gdb1_path, 1);
+    oneAddReference(writer->of, (char*)gdb2_path, 2);
+
+    // Write trace point spacing (required by schema)
+    // Use 100 as default (same as FastGA)
+    oneInt(writer->of, 0) = 100;
+    oneWriteLine(writer->of, 't', 0, 0);
+
+    return writer;
+
+error:
+    if (writer) {
+        if (writer->gdb1) {
+            Close_GDB(writer->gdb1);
+            free(writer->gdb1);
+        }
+        if (writer->gdb2 && writer->gdb2 != writer->gdb1) {
+            Close_GDB(writer->gdb2);
+            free(writer->gdb2);
+        }
+        if (writer->of) {
+            oneFileClose(writer->of);
+        }
+        free(writer);
+    }
+    return NULL;
+}
+
+int aln_write_record(void *handle_ptr, const AlnRecord *rec) {
+    AlnWriter *writer = (AlnWriter*)handle_ptr;
+    if (!writer || !writer->of || !rec) return -1;
+
+    // Map scaffold IDs back to contig IDs
+    // For now, assume scaffold ID == contig ID (simplified)
+    // A full implementation would need reverse lookup
+
+    int64 aread = rec->query_id;
+    int64 bread = rec->target_id;
+
+    // Write alignment record: O A 6 3 INT (aread, abpos, aepos, bread, bbpos, bepos)
+    oneInt(writer->of, 0) = aread;
+    oneInt(writer->of, 1) = rec->query_start;
+    oneInt(writer->of, 2) = rec->query_end;
+    oneInt(writer->of, 3) = bread;
+    oneInt(writer->of, 4) = rec->target_start;
+    oneInt(writer->of, 5) = rec->target_end;
+    oneWriteLine(writer->of, 'A', 0, 0);
+
+    // Write reverse flag if set: D R 0
+    if (rec->reverse) {
+        oneWriteLine(writer->of, 'R', 0, 0);
+    }
+
+    // Write differences: D D 1 3 INT
+    oneInt(writer->of, 0) = rec->diffs;
+    oneWriteLine(writer->of, 'D', 0, 0);
+
+    // Write sequence lengths: D L 2 3 INT 3 INT
+    oneInt(writer->of, 0) = rec->query_len;
+    oneInt(writer->of, 1) = rec->target_len;
+    oneWriteLine(writer->of, 'L', 0, 0);
+
+    return 0;
+}
+
+void aln_close_writer(void *handle_ptr) {
+    AlnWriter *writer = (AlnWriter*)handle_ptr;
+    if (!writer) return;
+
+    if (writer->of) {
+        oneFileClose(writer->of);
+    }
+
+    if (writer->gdb1) {
+        Close_GDB(writer->gdb1);
+        free(writer->gdb1);
+    }
+
+    if (writer->gdb2 && writer->gdb2 != writer->gdb1) {
+        Close_GDB(writer->gdb2);
+        free(writer->gdb2);
+    }
+
+    free(writer);
+}
