@@ -57,6 +57,7 @@
 //! should be synchronized when using the same aligner instance from multiple threads.
 
 pub mod alignment;
+pub mod aln_reader;
 pub mod config;
 pub mod embedded;
 pub mod error;
@@ -64,6 +65,7 @@ pub mod ffi;
 pub mod fork_api;
 pub mod fork_runner;
 pub mod intermediate;
+pub mod onelib;
 pub mod orchestrator;
 pub mod query_set;
 pub mod simple_runner;
@@ -74,6 +76,7 @@ use error::Result;
 use std::path::Path;
 
 pub use alignment::{Alignment, Alignments};
+pub use aln_reader::{AlnReader, AlnRecord};
 pub use config::{Config, OutputFormat};
 pub use error::FastGAError;
 pub use query_set::{align_queries, QueryAlignmentIterator, QueryAlignmentSet};

@@ -104,94 +104,104 @@ impl AlnReader {
     /// Returns None when EOF is reached
     pub fn read_alignment(&mut self) -> Result<Option<Alignment>> {
         unsafe {
-            // Read lines until we find an 'A' (alignment) record
+            // Skip to next 'A' record (alignment)
             loop {
-                let line_type = oneReadLine(self.file);
+                let line_type = one_line_type(self.file);
 
-                if line_type == 0 {
-                    // EOF
-                    return Ok(None);
+                // If we're not at an 'A' record, read next line
+                if line_type != b'A' as c_char {
+                    let next = oneReadLine(self.file);
+                    if next == 0 {
+                        return Ok(None); // EOF
+                    }
+                    continue;
                 }
 
-                if line_type as u8 as char == 'A' {
-                    // Found alignment record
-                    // Schema: O A 6 3 INT 3 INT 3 INT 3 INT 3 INT 3 INT
-                    //         positions: a_id, a_beg, a_end, b_id, b_beg, b_end
+                // We're at an 'A' record
+                // Schema: O A 6 3 INT 3 INT 3 INT 3 INT 3 INT 3 INT
+                // Fields: aread, abpos, aepos, bread, bbpos, bepos
 
-                    let a_id = one_int(self.file, 0) as usize;
-                    let a_beg = one_int(self.file, 1) as u64;
-                    let a_end = one_int(self.file, 2) as u64;
-                    let b_id = one_int(self.file, 3) as usize;
-                    let b_beg = one_int(self.file, 4) as u64;
-                    let b_end = one_int(self.file, 5) as u64;
+                let a_id = one_int(self.file, 0);
+                let a_beg = one_int(self.file, 1) as u64;
+                let a_end = one_int(self.file, 2) as u64;
+                let b_id = one_int(self.file, 3);
+                let b_beg = one_int(self.file, 4) as u64;
+                let b_end = one_int(self.file, 5) as u64;
 
-                    // Read associated data lines (M, D, R, etc.)
-                    let mut matches = 0;
-                    let mut diffs = 0;
-                    let mut is_reverse = false;
-                    let mut query_len = 0;
-                    let mut target_len = 0;
+                // Read associated data lines until we hit 'T' (trace) or next 'A'
+                let mut matches = 0u64;
+                let mut diffs = 0u64;
+                let mut is_reverse = false;
+                let mut query_len = 0u64;
+                let mut target_len = 0u64;
 
-                    loop {
-                        let next_type = oneReadLine(self.file);
+                loop {
+                    let next_type = oneReadLine(self.file);
 
-                        if next_type == 0 || next_type as u8 as char == 'A' {
-                            // EOF or next alignment - we're done with this one
-                            // Note: We need to "put back" this line somehow
-                            // For now, just process what we have
-                            break;
-                        }
-
-                        match next_type as u8 as char {
-                            'M' => matches = one_int(self.file, 0) as u64,
-                            'D' => diffs = one_int(self.file, 0) as u64,
-                            'R' => is_reverse = true,
-                            'L' => {
-                                query_len = one_int(self.file, 0) as u64;
-                                target_len = one_int(self.file, 1) as u64;
-                            }
-                            'T' | 'X' | 'C' | 'Q' => {
-                                // Skip trace points, diff counts, CIGAR, quality
-                                // We don't need these for filtering
-                                continue;
-                            }
-                            _ => continue,
-                        }
+                    if next_type == 0 {
+                        break; // EOF
                     }
 
-                    // Calculate identity
-                    let block_len = a_end - a_beg;
-                    let identity = if block_len > 0 {
-                        matches as f64 / (matches + diffs) as f64
-                    } else {
-                        0.0
-                    };
-
-                    // Create alignment
-                    // Note: We don't have sequence names yet - those need to come from
-                    // the sequence section of the file. For now, use IDs as placeholder.
-                    let alignment = Alignment {
-                        query_name: format!("seq_{}", a_id),
-                        query_len,
-                        query_start: a_beg,
-                        query_end: a_end,
-                        strand: if is_reverse { '-' } else { '+' },
-                        target_name: format!("seq_{}", b_id),
-                        target_len,
-                        target_start: b_beg,
-                        target_end: b_end,
-                        matches,
-                        block_len,
-                        mapping_quality: 60, // Default
-                        cigar: String::new(), // Not extracting CIGAR for now
-                        tags: Vec::new(),
-                        mismatches: diffs - matches, // Rough approximation
-                        gap_opens: 0, // Not tracked in .1aln
-                        gap_len: 0,
-                    };
-
-                    return Ok(Some(alignment));
+                    match next_type as u8 as char {
+                        'T' => {
+                            // Trace record - marks end of this alignment's data
+                            // Read next line to position for next alignment
+                            oneReadLine(self.file);
+                            break;
+                        }
+                        'M' => matches = one_int(self.file, 0) as u64,
+                        'D' => diffs = one_int(self.file, 0) as u64,
+                        'R' => is_reverse = true,
+                        'L' => {
+                            query_len = one_int(self.file, 0) as u64;
+                            target_len = one_int(self.file, 1) as u64;
+                        }
+                        'A' => {
+                            // Hit next alignment without seeing 'T'
+                            // This is valid - not all alignments have traces
+                            break;
+                        }
+                        _ => {
+                            // Skip other records (X, C, Q, etc.)
+                            continue;
+                        }
+                    }
                 }
+
+                // Calculate block length and identity
+                let block_len = a_end - a_beg;
+                let alignment_len = matches + diffs;
+
+                // Identity: matches / total_aligned_bases
+                let identity = if alignment_len > 0 {
+                    matches as f64 / alignment_len as f64
+                } else {
+                    0.0
+                };
+
+                // Create alignment using sequence IDs
+                // Filtering doesn't need actual names, just unique identifiers
+                let alignment = Alignment {
+                    query_name: format!("{}", a_id),
+                    query_len: query_len as usize,
+                    query_start: a_beg as usize,
+                    query_end: a_end as usize,
+                    strand: if is_reverse { '-' } else { '+' },
+                    target_name: format!("{}", b_id),
+                    target_len: target_len as usize,
+                    target_start: b_beg as usize,
+                    target_end: b_end as usize,
+                    matches: matches as usize,
+                    block_len: block_len as usize,
+                    mapping_quality: 60, // Default quality
+                    cigar: String::new(), // Don't extract CIGAR for filtering
+                    tags: Vec::new(),
+                    mismatches: diffs as usize, // Differences include substitutions + indels
+                    gap_opens: 0, // Not tracked in basic .1aln
+                    gap_len: 0,
+                };
+
+                return Ok(Some(alignment));
             }
         }
     }

@@ -1,0 +1,32 @@
+#ifndef ALN_FILTER_WRAPPER_H
+#define ALN_FILTER_WRAPPER_H
+
+#include "gene_core.h"  // For int64 type
+
+// Simple alignment record for filtering
+typedef struct {
+    int64 query_id;
+    int64 query_start;
+    int64 query_end;
+    int64 target_id;
+    int64 target_start;
+    int64 target_end;
+    int reverse;
+    int diffs;
+    int64 query_len;
+    int64 target_len;
+} AlnRecord;
+
+// Open .1aln file and get alignment count
+void* aln_open(const char *path, int64 *num_alignments);
+
+// Read next alignment record (returns 0 on success, -1 on EOF)
+int aln_read_record(void *handle, AlnRecord *record);
+
+// Get sequence name by ID
+const char* aln_get_seq_name(void *handle, int64 seq_id, int which_db);
+
+// Close file
+void aln_close(void *handle);
+
+#endif

@@ -1,6 +1,7 @@
 // Rust-friendly wrappers for ONElib functions
 // These provide clean accessors without macro complexity
 
+#include <stdint.h>
 #include "ONElib.h"
 #include "alncode.h"
 

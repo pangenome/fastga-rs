@@ -7,6 +7,8 @@ use std::path::PathBuf;
 fn main() {
     println!("cargo:rerun-if-changed=build.rs");
     println!("cargo:rerun-if-changed=deps/fastga");
+    println!("cargo:rerun-if-changed=aln_filter_wrapper.c");
+    println!("cargo:rerun-if-changed=aln_filter_wrapper.h");
 
     let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap());
     let manifest_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap());
@@ -19,10 +21,13 @@ fn main() {
     cc::Build::new()
         .file(fastga_dir.join("rust_wrappers.c"))
         .file(fastga_dir.join("rust_onelib.c"))
+        .file(manifest_dir.join("aln_filter_wrapper.c"))
         .file(fastga_dir.join("GDB.c"))
         .file(fastga_dir.join("gene_core.c"))
         .file(fastga_dir.join("ONElib.c"))
+        .file(fastga_dir.join("alncode.c"))
         .include(&fastga_dir)
+        .include(&manifest_dir)
         .flag("-O3")
         .flag("-fno-strict-aliasing")
         .warnings(false)
