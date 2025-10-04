@@ -302,6 +302,18 @@ int aln_write_record(void *handle_ptr, const AlnRecord *rec) {
     oneInt(writer->of, 1) = rec->target_len;
     oneWriteLine(writer->of, 'L', 0, 0);
 
+    // Write trace points for ALNtoPAF compatibility
+    // T line: trace points in target (b) sequence
+    // We write a single trace point at the end of the alignment
+    int64 tlen = rec->target_end - rec->target_start;
+    int64 trace_points[1] = { tlen };
+    oneWriteLine(writer->of, 'T', 1, trace_points);
+
+    // X line: number of diffs per trace interval
+    // All diffs are in the single interval
+    int64 diffs_list[1] = { rec->diffs };
+    oneWriteLine(writer->of, 'X', 1, diffs_list);
+
     return 0;
 }
 
