@@ -257,6 +257,12 @@ impl ForkOrchestrator {
         cmd.arg(query_path)
            .arg(target_path);
 
+        // Set working directory to where the input files are
+        // This ensures FastGA can find its intermediate .1aln files
+        if let Some(parent_dir) = query_path.parent() {
+            cmd.current_dir(parent_dir);
+        }
+
         eprintln!("[fastga] Executing: {cmd:?}");
 
         let output = cmd.output()

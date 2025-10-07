@@ -1,26 +1,18 @@
 //! Rust reimplementation of FastGA's orchestration logic
 //!
-//! This module replaces FastGA's main() with pure Rust code that calls
-//! the underlying C functions directly via FFI.
+//! This module orchestrates FastGA utilities (FAtoGDB, GIXmake, FastGA)
+//! via system calls instead of FFI to avoid hanging issues.
 
 use crate::error::{FastGAError, Result};
 use std::ffi::CString;
 use std::os::raw::{c_char, c_int};
 use std::path::Path;
 
-// FFI bindings to the actual worker functions in FastGA's C code
-#[link(name = "fatogdb_main", kind = "static")]
-#[link(name = "gixmake_main", kind = "static")]
+// FFI bindings only for the core alignment function
 #[link(name = "fastga_main", kind = "static")]
 #[link(name = "fastga_common", kind = "static")]
 extern "C" {
-    // FAtoGDB functions
-    fn fatogdb_main(argc: c_int, argv: *const *const c_char) -> c_int;
-
-    // GIXmake functions
-    fn gixmake_main(argc: c_int, argv: *const *const c_char) -> c_int;
-
-    // GDB functions would go here if we needed them directly
+    fn fastga_main(argc: c_int, argv: *const *const c_char) -> c_int;
 }
 
 /// Pure Rust implementation of FastGA's orchestration
@@ -56,164 +48,205 @@ impl FastGAOrchestrator {
         eprintln!("[FastGA] Target: {target_path:?}");
         // Step 1: Convert FASTA files to GDB format if needed
         eprintln!("[FastGA] Step 1: Converting FASTA to GDB format...");
-        let query_gdb = self.prepare_gdb(query_path)?;
-        eprintln!("[FastGA] Query GDB created: {query_gdb}");
-        let target_gdb = self.prepare_gdb(target_path)?;
-        eprintln!("[FastGA] Target GDB created: {target_gdb}");
+        let _query_gdb = self.prepare_gdb(query_path)?;
+        eprintln!("[FastGA] Query GDB created");
+        let _target_gdb = self.prepare_gdb(target_path)?;
+        eprintln!("[FastGA] Target GDB created");
 
         // Step 2: Create k-mer indices if needed
         eprintln!("[FastGA] Step 2: Creating k-mer indices...");
-        self.create_index(&query_gdb, self.kmer_freq)?;
+        self.create_index(&_query_gdb, self.kmer_freq)?;
         eprintln!("[FastGA] Query index created");
-        self.create_index(&target_gdb, self.kmer_freq)?;
+        self.create_index(&_target_gdb, self.kmer_freq)?;
         eprintln!("[FastGA] Target index created");
 
-        // Step 3: Perform the actual alignment
+        // Step 3: Perform the actual alignment (pass FASTA paths, FastGA will use the .gdb/.gix)
         eprintln!("[FastGA] Step 3: Running alignment...");
-        let paf_output = self.run_alignment(&query_gdb, &target_gdb)?;
+        let paf_output = self.run_alignment(query_path, target_path)?;
         eprintln!("[FastGA] Alignment complete, output size: {} bytes", paf_output.len());
-
-        // Clean up temporary files
-        self.cleanup(&query_gdb)?;
-        self.cleanup(&target_gdb)?;
 
         Ok(paf_output)
     }
 
     /// Convert FASTA to GDB format using FAtoGDB
-    fn prepare_gdb(&self, fasta_path: &Path) -> Result<String> {
+    pub fn prepare_gdb(&self, fasta_path: &Path) -> Result<String> {
         eprintln!("[FastGA] prepare_gdb: Converting {fasta_path:?} to GDB");
-        let gdb_path = fasta_path.with_extension("gdb");
+        let gdb_base = fasta_path.with_extension("");
+        let gdb_path = format!("{}.gdb", gdb_base.display());
+        let gdb_path_1 = format!("{}.1gdb", gdb_base.display());
 
         // Check if GDB already exists and is up-to-date
-        if gdb_path.exists() {
-            if let (Ok(fasta_meta), Ok(gdb_meta)) =
-                (std::fs::metadata(fasta_path), std::fs::metadata(&gdb_path))
-            {
-                if let (Ok(fasta_time), Ok(gdb_time)) = (fasta_meta.modified(), gdb_meta.modified())
-                {
-                    if gdb_time >= fasta_time {
-                        return Ok(gdb_path.to_string_lossy().to_string());
+        if Path::new(&gdb_path).exists() || Path::new(&gdb_path_1).exists() {
+            if let Ok(fasta_meta) = std::fs::metadata(fasta_path) {
+                let gdb_exists = Path::new(&gdb_path).exists();
+                let gdb_1_exists = Path::new(&gdb_path_1).exists();
+
+                if gdb_exists || gdb_1_exists {
+                    let check_path = if gdb_1_exists { &gdb_path_1 } else { &gdb_path };
+                    if let Ok(gdb_meta) = std::fs::metadata(check_path) {
+                        if let (Ok(fasta_time), Ok(gdb_time)) = (fasta_meta.modified(), gdb_meta.modified()) {
+                            if gdb_time >= fasta_time {
+                                eprintln!("[FastGA] GDB already exists and is up-to-date");
+                                return Ok(gdb_base.to_string_lossy().to_string());
+                            }
+                        }
                     }
                 }
             }
         }
 
-        // Call FAtoGDB directly via FFI
-        let args = [CString::new("FAtoGDB").unwrap(),
-            CString::new(fasta_path.to_string_lossy().to_string()).unwrap()];
+        // Call FAtoGDB via system call
+        let bin_dir = env!("FASTGA_BIN_DIR");
+        let fatogdb_bin = Path::new(bin_dir).join("FAtoGDB");
 
-        let argv: Vec<*const c_char> = args.iter().map(|s| s.as_ptr()).collect();
+        eprintln!("[FastGA] Calling FAtoGDB: {} {}", fatogdb_bin.display(), fasta_path.display());
 
-        eprintln!("[FastGA] Calling fatogdb_main with args: {:?}", args.iter().map(|s| s.to_str().unwrap()).collect::<Vec<_>>());
-        let result = unsafe { fatogdb_main(argv.len() as c_int, argv.as_ptr()) };
-        eprintln!("[FastGA] fatogdb_main returned: {result}");
+        let output = std::process::Command::new(&fatogdb_bin)
+            .arg(fasta_path)
+            .output()
+            .map_err(|e| FastGAError::Other(format!("Failed to run FAtoGDB: {}", e)))?;
 
-        if result != 0 {
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            let stdout = String::from_utf8_lossy(&output.stdout);
             return Err(FastGAError::Other(format!(
-                "FAtoGDB failed with code {result}"
+                "FAtoGDB failed with code {:?}\nstdout: {}\nstderr: {}",
+                output.status.code(), stdout, stderr
             )));
         }
 
-        Ok(gdb_path.to_string_lossy().to_string())
+        eprintln!("[FastGA] FAtoGDB completed successfully");
+        Ok(gdb_base.to_string_lossy().to_string())
     }
 
     /// Create k-mer index using GIXmake
-    fn create_index(&self, gdb_path: &str, freq: i32) -> Result<()> {
+    pub fn create_index(&self, gdb_path: &str, _freq: i32) -> Result<()> {
         eprintln!("[FastGA] create_index: Creating index for {gdb_path}");
-        let gix_path = gdb_path.replace(".gdb", ".gix");
+        let gix_path = format!("{}.gix", gdb_path);
 
         // Check if index already exists
         if Path::new(&gix_path).exists() {
-            // TODO: Check if it's up-to-date with the GDB file
+            eprintln!("[FastGA] Index already exists: {}", gix_path);
             return Ok(());
         }
 
-        // Call GIXmake directly via FFI
-        let args = [CString::new("GIXmake").unwrap(),
-            CString::new(format!("-T{}", self.num_threads)).unwrap(),
-            CString::new(format!("-P{}", self.temp_dir)).unwrap(),
-            CString::new(format!("-f{freq}")).unwrap(),
-            CString::new(gdb_path).unwrap()];
+        // Call GIXmake via system call
+        // Note: GIXmake doesn't use -f for frequency, it uses -k for k-mer size (default 40)
+        let bin_dir = env!("FASTGA_BIN_DIR");
+        let gixmake_bin = Path::new(bin_dir).join("GIXmake");
 
-        let argv: Vec<*const c_char> = args.iter().map(|s| s.as_ptr()).collect();
+        eprintln!("[FastGA] Calling GIXmake: {} -T{} -P{} {}",
+                  gixmake_bin.display(), self.num_threads, self.temp_dir, gdb_path);
 
-        eprintln!("[FastGA] Calling gixmake_main with args: {:?}", args.iter().map(|s| s.to_str().unwrap()).collect::<Vec<_>>());
-        let result = unsafe { gixmake_main(argv.len() as c_int, argv.as_ptr()) };
-        eprintln!("[FastGA] gixmake_main returned: {result}");
+        let output = std::process::Command::new(&gixmake_bin)
+            .arg(format!("-T{}", self.num_threads))
+            .arg(format!("-P{}", self.temp_dir))
+            .arg(gdb_path)
+            .output()
+            .map_err(|e| FastGAError::Other(format!("Failed to run GIXmake: {}", e)))?;
 
-        if result != 0 {
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            let stdout = String::from_utf8_lossy(&output.stdout);
             return Err(FastGAError::Other(format!(
-                "GIXmake failed with code {result}"
+                "GIXmake failed with code {:?}\nstdout: {}\nstderr: {}",
+                output.status.code(), stdout, stderr
             )));
         }
 
+        eprintln!("[FastGA] GIXmake completed successfully");
         Ok(())
     }
 
-    /// Run the actual alignment algorithm
-    fn run_alignment(&self, query_gdb: &str, target_gdb: &str) -> Result<Vec<u8>> {
-        eprintln!("[FastGA] run_alignment: Aligning {query_gdb} vs {target_gdb}");
-        // This is where we'd call the core alignment functions from FastGA
-        // For now, we'll still use the wrapped main function, but ideally
-        // we'd extract and call the actual alignment logic directly
+    /// Run the actual alignment algorithm using FastGA binary
+    fn run_alignment(&self, query_path: &Path, target_path: &Path) -> Result<Vec<u8>> {
+        eprintln!("[FastGA] run_alignment: Aligning {} vs {}", query_path.display(), target_path.display());
 
-        use std::os::unix::io::FromRawFd;
+        // Call FastGA binary via system call
+        let bin_dir = env!("FASTGA_BIN_DIR");
+        let fastga_bin = Path::new(bin_dir).join("FastGA");
+        let alnto_paf_bin = Path::new(bin_dir).join("ALNtoPAF");
 
-        // Create pipe to capture output
-        let (read_fd, write_fd) = nix::unistd::pipe()
-            .map_err(|e| FastGAError::Other(format!("Failed to create pipe: {e}")))?;
+        // Set working directory to where the input files are and use relative paths
+        let working_dir = query_path.parent().ok_or_else(||
+            FastGAError::Other("Cannot determine parent directory".to_string()))?;
 
-        // Save original stdout
-        let original_stdout = unsafe { libc::dup(1) };
+        let query_filename = query_path.file_name().ok_or_else(||
+            FastGAError::Other("Cannot determine query filename".to_string()))?;
+        let target_filename = target_path.file_name().ok_or_else(||
+            FastGAError::Other("Cannot determine target filename".to_string()))?;
 
-        // Redirect stdout to pipe
-        unsafe {
-            libc::dup2(write_fd, 1);
-            libc::close(write_fd);
+        // Create temporary .1aln file
+        let temp_aln = working_dir.join(format!("_tmp_{}.1aln", std::process::id()));
+        let temp_aln_rel = temp_aln.file_name().unwrap();
+
+        eprintln!("[FastGA] Calling FastGA: {} -1:{} -T{} -i{:.2} {} {} (in dir: {})",
+                  fastga_bin.display(), temp_aln_rel.to_string_lossy(),
+                  self.num_threads, self.min_identity,
+                  query_filename.to_string_lossy(), target_filename.to_string_lossy(),
+                  working_dir.display());
+
+        // Add the bin directory to PATH so FastGA can find utilities
+        let mut path_env = std::env::var("PATH").unwrap_or_default();
+        if !path_env.is_empty() {
+            path_env.push(':');
+        }
+        path_env.push_str(Path::new(bin_dir).to_str().unwrap());
+
+        let mut cmd = std::process::Command::new(&fastga_bin);
+        cmd.arg(format!("-1:{}", temp_aln_rel.to_string_lossy()))
+           .arg(format!("-T{}", self.num_threads));
+
+        // Only add -l if it's > 0 (FastGA's default is 0 anyway)
+        if self.min_length > 0 {
+            cmd.arg(format!("-l{}", self.min_length));
         }
 
-        // Build arguments for the core alignment
-        // We're calling the main function but with GDB files already prepared
-        let args = [CString::new("FastGA").unwrap(),
-            CString::new("-pafx").unwrap(),
-            CString::new(format!("-T{}", self.num_threads)).unwrap(),
-            CString::new(format!("-l{}", self.min_length)).unwrap(),
-            CString::new(format!("-i{:.2}", self.min_identity)).unwrap(),
-            CString::new(query_gdb).unwrap(),
-            CString::new(target_gdb).unwrap()];
+        cmd.arg(format!("-i{:.2}", self.min_identity))
+           .arg(query_filename)
+           .arg(target_filename)
+           .current_dir(working_dir)
+           .env("PATH", path_env);
 
-        let argv: Vec<*const c_char> = args.iter().map(|s| s.as_ptr()).collect();
+        let output = cmd.output()
+            .map_err(|e| FastGAError::Other(format!("Failed to run FastGA: {}", e)))?;
 
-        // For now, still calling fastga_main, but we should extract the actual
-        // alignment logic and call it directly
-        extern "C" {
-            fn fastga_main(argc: c_int, argv: *const *const c_char) -> c_int;
-        }
-
-        eprintln!("[FastGA] Calling fastga_main with args: {:?}", args.iter().map(|s| s.to_str().unwrap()).collect::<Vec<_>>());
-        let result = unsafe { fastga_main(argv.len() as c_int, argv.as_ptr()) };
-        eprintln!("[FastGA] fastga_main returned: {result}");
-
-        // Restore stdout
-        unsafe {
-            libc::dup2(original_stdout, 1);
-            libc::close(original_stdout);
-        }
-
-        if result != 0 {
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            // Clean up temp file
+            let _ = std::fs::remove_file(&temp_aln);
             return Err(FastGAError::Other(format!(
-                "Alignment failed with code {result}"
+                "FastGA failed with code {:?}\nstdout: {}\nstderr: {}",
+                output.status.code(), stdout, stderr
             )));
         }
 
-        // Read output from pipe
-        let mut output = Vec::new();
-        let mut pipe_file = unsafe { std::fs::File::from_raw_fd(read_fd) };
-        std::io::Read::read_to_end(&mut pipe_file, &mut output)
-            .map_err(FastGAError::IoError)?;
+        eprintln!("[FastGA] FastGA completed, converting .1aln to PAF");
 
-        Ok(output)
+        // Now convert .1aln to PAF using ALNtoPAF
+        // Using -x flag for extended CIGAR with X/= operators (works with FastGA 1789f15)
+        let paf_output = std::process::Command::new(&alnto_paf_bin)
+            .arg("-x")
+            .arg(temp_aln_rel)
+            .current_dir(working_dir)
+            .output()
+            .map_err(|e| FastGAError::Other(format!("Failed to run ALNtoPAF: {}", e)))?;
+
+        // Clean up temp .1aln file
+        let _ = std::fs::remove_file(&temp_aln);
+
+        if !paf_output.status.success() {
+            let stderr = String::from_utf8_lossy(&paf_output.stderr);
+            let stdout = String::from_utf8_lossy(&paf_output.stdout);
+            return Err(FastGAError::Other(format!(
+                "ALNtoPAF failed with code {:?}\nstdout: {}\nstderr: {}",
+                paf_output.status.code(), stdout, stderr
+            )));
+        }
+
+        eprintln!("[FastGA] Conversion completed successfully, output size: {} bytes", paf_output.stdout.len());
+        Ok(paf_output.stdout)
     }
 
     /// Clean up temporary files

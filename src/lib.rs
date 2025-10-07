@@ -166,6 +166,36 @@ impl FastGA {
     pub fn align_to_file(&self, genome1: &Path, genome2: &Path, output_path: &Path) -> Result<usize> {
         self.inner.align_to_file(genome1, genome2, output_path)
     }
+
+    /// Convert a FASTA file to GDB format (for efficient reuse across multiple alignments).
+    ///
+    /// This is useful when you need to align the same genome multiple times - you can
+    /// create the GDB once and reuse it.
+    ///
+    /// # Arguments
+    /// * `fasta_path` - Path to FASTA file
+    ///
+    /// # Returns
+    /// Path to the created .gdb file
+    pub fn fasta_to_gdb(&self, fasta_path: &Path) -> Result<String> {
+        let orchestrator = orchestrator::FastGAOrchestrator::new();
+        orchestrator.prepare_gdb(fasta_path)
+    }
+
+    /// Create a k-mer index (.gix) for a GDB file.
+    ///
+    /// This is useful when you want to pre-build indices before running multiple alignments.
+    ///
+    /// # Arguments
+    /// * `gdb_path` - Path to .gdb file
+    /// * `kmer_freq` - K-mer frequency threshold (default: 10)
+    ///
+    /// # Returns
+    /// Ok(()) if successful
+    pub fn create_index(&self, gdb_path: &str, kmer_freq: Option<i32>) -> Result<()> {
+        let orchestrator = orchestrator::FastGAOrchestrator::new();
+        orchestrator.create_index(gdb_path, kmer_freq.unwrap_or(10))
+    }
 }
 
 #[cfg(test)]
