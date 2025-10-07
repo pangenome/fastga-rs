@@ -68,6 +68,12 @@ impl FastGAOrchestrator {
         Ok(paf_output)
     }
 
+    /// Align two genomes assuming GDB/GIX files already exist
+    /// This is more efficient when indices are pre-built
+    pub fn align_with_existing_indices(&self, query_path: &Path, target_path: &Path) -> Result<Vec<u8>> {
+        self.run_alignment(query_path, target_path)
+    }
+
     /// Convert FASTA to GDB format using FAtoGDB
     pub fn prepare_gdb(&self, fasta_path: &Path) -> Result<String> {
         eprintln!("[FastGA] prepare_gdb: Converting {fasta_path:?} to GDB");
@@ -202,8 +208,12 @@ impl FastGAOrchestrator {
             cmd.arg(format!("-l{}", self.min_length));
         }
 
-        cmd.arg(format!("-i{:.2}", self.min_identity))
-           .arg(query_filename)
+        // Only add -i if it's > 0.0 (let FastGA use its default otherwise)
+        if self.min_identity > 0.0 {
+            cmd.arg(format!("-i{:.2}", self.min_identity));
+        }
+
+        cmd.arg(query_filename)
            .arg(target_filename)
            .current_dir(working_dir)
            .env("PATH", path_env);
