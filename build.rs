@@ -18,9 +18,10 @@ fn main() {
     println!("cargo:warning=Building FastGA as static library...");
 
     // Build our wrapper functions
+    let deps_dir = manifest_dir.join("deps");
     cc::Build::new()
-        .file(fastga_dir.join("rust_wrappers.c"))
-        .file(fastga_dir.join("rust_onelib.c"))
+        .file(deps_dir.join("rust_wrappers.c"))
+        .file(deps_dir.join("rust_onelib.c"))
         .file(manifest_dir.join("aln_filter_wrapper.c"))
         .file(fastga_dir.join("GDB.c"))
         .file(fastga_dir.join("gene_core.c"))
