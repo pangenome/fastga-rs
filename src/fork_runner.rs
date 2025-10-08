@@ -7,6 +7,7 @@ use std::ffi::CString;
 use std::os::raw::{c_char, c_int};
 use std::path::{Path, PathBuf};
 use crate::error::{Result, FastGAError};
+use crate::config::OutputFormat;
 use nix::unistd::{fork, ForkResult};
 use nix::sys::wait::{waitpid, WaitStatus};
 use std::process::exit;
@@ -181,21 +182,19 @@ impl ForkOrchestrator {
 
     fn run_fastga_alignment(&self, query_path: &Path, target_path: &Path) -> Result<String> {
         use std::process::Command;
-        use crate::config::OutputFormat;
 
         // Find FastGA binary
         let fastga = find_fastga_binary()?;
 
+        // Create temp .1aln file in same directory as input
+        let working_dir = query_path.parent().ok_or_else(||
+            FastGAError::Other("Cannot determine parent directory".to_string()))?;
+        let temp_aln = working_dir.join(format!("_tmp_{}.1aln", std::process::id()));
+
         let mut cmd = Command::new(&fastga);
 
-        // Set output format
-        match self.config.output_format {
-            OutputFormat::PafWithX => cmd.arg("-pafx"),
-            OutputFormat::PafWithM => cmd.arg("-pafm"),
-            OutputFormat::PafShort => cmd.arg("-pafs"),
-            OutputFormat::PafLong => cmd.arg("-pafS"),
-            OutputFormat::Psl => cmd.arg("-psl"),
-        };
+        // Use .1aln output format
+        cmd.arg(format!("-1:{}", temp_aln.file_name().unwrap().to_string_lossy()));
 
         // Basic parameters
         cmd.arg(format!("-T{}", self.config.num_threads));
@@ -258,7 +257,6 @@ impl ForkOrchestrator {
            .arg(target_path);
 
         // Set working directory to where the input files are
-        // This ensures FastGA can find its intermediate .1aln files
         if let Some(parent_dir) = query_path.parent() {
             cmd.current_dir(parent_dir);
         }
@@ -270,77 +268,86 @@ impl ForkOrchestrator {
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
-            eprintln!("[fastga] Failed with: {}", stderr.trim());
-            // Try without -g flag
-            eprintln!("[fastga] Retrying without -g flag");
+            let _ = std::fs::remove_file(&temp_aln); // Clean up
+            return Err(FastGAError::Other(format!("FastGA failed: {}", stderr)));
+        }
 
-            let mut cmd2 = Command::new(&fastga);
+        // FastGA succeeded, now convert .1aln to desired output format
+        let result = match self.config.output_format {
+            OutputFormat::Aln => {
+                // Return path to .1aln file
+                Ok(temp_aln.to_string_lossy().to_string())
+            },
+            OutputFormat::Psl => self.convert_to_psl(&temp_aln),
+            _ => self.convert_to_paf(&temp_aln, self.config.output_format),
+        }?;
 
-            // Rebuild command without -g flag
-            match self.config.output_format {
-                OutputFormat::PafWithX => cmd2.arg("-pafx"),
-                OutputFormat::PafWithM => cmd2.arg("-pafm"),
-                OutputFormat::PafShort => cmd2.arg("-pafs"),
-                OutputFormat::PafLong => cmd2.arg("-pafS"),
-                OutputFormat::Psl => cmd2.arg("-psl"),
-            };
+        // Clean up temp .1aln file unless keep_intermediates is set or format is Aln
+        if !self.config.keep_intermediates && self.config.output_format != OutputFormat::Aln {
+            let _ = std::fs::remove_file(&temp_aln);
+        }
 
-            cmd2.arg(format!("-T{}", self.config.num_threads));
+        Ok(result)
+    }
 
-            // Only add -l if it's > 0 (FastGA's default is 0 anyway)
-            if self.config.min_alignment_length > 0 {
-                cmd2.arg(format!("-l{}", self.config.min_alignment_length));
-            }
+    fn convert_to_paf(&self, aln_file: &Path, format: OutputFormat) -> Result<String> {
+        use std::process::Command;
 
-            if let Some(identity) = self.config.min_identity {
-                cmd2.arg(format!("-i{identity:.2}"));
-            }
+        let alnto_paf = find_alnto_paf_binary()?;
+        let mut cmd = Command::new(&alnto_paf);
 
-            // Add all other parameters (same as above)
-            if let Some(cutoff) = self.config.adaptive_seed_cutoff {
-                cmd2.arg(format!("-f{cutoff}"));
-            }
-            if let Some(coverage) = self.config.min_chain_coverage {
-                // FastGA expects -c as an integer percentage (0-100)
-                let coverage_pct = (coverage * 100.0) as i32;
-                cmd2.arg(format!("-c{coverage_pct}"));
-            }
-            if let Some(threshold) = self.config.chain_start_threshold {
-                cmd2.arg(format!("-s{threshold}"));
-            }
-            if self.config.verbose { cmd2.arg("-v"); }
-            if self.config.keep_intermediates { cmd2.arg("-k"); }
-            if self.config.soft_masking { cmd2.arg("-M"); }
-            if self.config.symmetric_seeding { cmd2.arg("-S"); }
-            if let Some(ref log_path) = self.config.log_file {
-                cmd2.arg(format!("-L:{}", log_path.display()));
-            }
-            if let Some(ref temp_dir) = self.config.temp_dir {
-                cmd2.arg(format!("-P{}", temp_dir.display()));
-            }
+        // Set ALNtoPAF flags based on output format
+        match format {
+            OutputFormat::PafWithX => { cmd.arg("-x"); },
+            OutputFormat::PafWithM => { cmd.arg("-m"); },
+            OutputFormat::PafShort => { cmd.arg("-s"); },
+            OutputFormat::PafLong => { cmd.arg("-S"); },
+            _ => {}, // Default PAF
+        }
 
-            cmd2.arg(query_path)
-                .arg(target_path);
+        cmd.arg(format!("-T{}", self.config.num_threads));
+        cmd.arg(aln_file);
 
-            let output2 = cmd2.output()
-                .map_err(|e| FastGAError::Other(format!("Failed to run FastGA: {e}")))?;
+        eprintln!("[fastga] Converting .1aln to PAF: {cmd:?}");
 
-            if !output2.status.success() {
-                return Err(FastGAError::Other(format!("FastGA failed: {}",
-                    String::from_utf8_lossy(&output2.stderr))));
-            }
+        let output = cmd.output()
+            .map_err(|e| FastGAError::Other(format!("Failed to run ALNtoPAF: {e}")))?;
 
-            return Ok(String::from_utf8_lossy(&output2.stdout).to_string());
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(FastGAError::Other(format!("ALNtoPAF failed: {}", stderr)));
+        }
+
+        Ok(String::from_utf8_lossy(&output.stdout).to_string())
+    }
+
+    fn convert_to_psl(&self, aln_file: &Path) -> Result<String> {
+        use std::process::Command;
+
+        let alnto_psl = find_alnto_psl_binary()?;
+        let mut cmd = Command::new(&alnto_psl);
+
+        cmd.arg(format!("-T{}", self.config.num_threads));
+        cmd.arg(aln_file);
+
+        eprintln!("[fastga] Converting .1aln to PSL: {cmd:?}");
+
+        let output = cmd.output()
+            .map_err(|e| FastGAError::Other(format!("Failed to run ALNtoPSL: {e}")))?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(FastGAError::Other(format!("ALNtoPSL failed: {}", stderr)));
         }
 
         Ok(String::from_utf8_lossy(&output.stdout).to_string())
     }
 }
 
-fn find_fastga_binary() -> Result<PathBuf> {
+fn find_binary(name: &str) -> Result<PathBuf> {
     // Try our build directory first
     if let Ok(out_dir) = std::env::var("OUT_DIR") {
-        let path = PathBuf::from(out_dir).join("FastGA");
+        let path = PathBuf::from(out_dir).join(name);
         if path.exists() {
             return Ok(path);
         }
@@ -353,9 +360,9 @@ fn find_fastga_binary() -> Result<PathBuf> {
             if let Ok(entries) = std::fs::read_dir(&build_dir) {
                 for entry in entries.flatten() {
                     if entry.file_name().to_string_lossy().starts_with("fastga-rs-") {
-                        let fastga = entry.path().join("out/FastGA");
-                        if fastga.exists() {
-                            return Ok(fastga);
+                        let binary = entry.path().join("out").join(name);
+                        if binary.exists() {
+                            return Ok(binary);
                         }
                     }
                 }
@@ -369,16 +376,28 @@ fn find_fastga_binary() -> Result<PathBuf> {
         if let Ok(entries) = std::fs::read_dir(&build_dir) {
             for entry in entries.flatten() {
                 if entry.file_name().to_string_lossy().starts_with("fastga-rs-") {
-                    let fastga = entry.path().join("out/FastGA");
-                    if fastga.exists() {
-                        return Ok(fastga);
+                    let binary = entry.path().join("out").join(name);
+                    if binary.exists() {
+                        return Ok(binary);
                     }
                 }
             }
         }
     }
 
-    Err(FastGAError::Other("FastGA binary not found".to_string()))
+    Err(FastGAError::Other(format!("{} binary not found", name)))
+}
+
+fn find_fastga_binary() -> Result<PathBuf> {
+    find_binary("FastGA")
+}
+
+fn find_alnto_paf_binary() -> Result<PathBuf> {
+    find_binary("ALNtoPAF")
+}
+
+fn find_alnto_psl_binary() -> Result<PathBuf> {
+    find_binary("ALNtoPSL")
 }
 
 #[cfg(test)]

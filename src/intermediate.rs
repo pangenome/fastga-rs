@@ -120,7 +120,7 @@ impl AlignmentPipeline {
         self.report_progress("index", "Building k-mer index");
         let output = Command::new(&gixmake)
             .arg(format!("-T{}", self.config.num_threads))
-            .arg("-f10")  // Default k-mer frequency
+            // Note: GIXmake doesn't use -f in newer versions (uses -k for k-mer size with default 40)
             .arg(gdb_path)
             .output()?;
 
@@ -138,9 +138,21 @@ impl AlignmentPipeline {
         self.report_progress("align", "Running alignment");
 
         let fastga = self.find_utility("FastGA")?;
+        let alnto_paf = self.find_utility("ALNtoPAF")?;
 
+        // FastGA expects the original FASTA paths, not the GDB paths
+        // Extract the original paths by removing the .1gdb extension
+        let query_fasta = query_db.with_extension("");
+        let target_fasta = target_db.with_extension("");
+
+        // Determine working directory for temp .1aln file
+        let working_dir = query_fasta.parent().ok_or_else(||
+            FastGAError::Other("Cannot determine parent directory".to_string()))?;
+        let temp_aln = working_dir.join(format!("_tmp_{}.1aln", std::process::id()));
+
+        // Step 1: Run FastGA to create .1aln file
         let mut cmd = Command::new(&fastga);
-        cmd.arg("-pafx")
+        cmd.arg(format!("-1:{}", temp_aln.file_name().unwrap().to_string_lossy()))
             .arg(format!("-T{}", self.config.num_threads))
             .arg(format!("-l{}", self.config.min_alignment_length));
 
@@ -148,12 +160,10 @@ impl AlignmentPipeline {
             cmd.arg(format!("-i{identity:.2}"));
         }
 
-        // FastGA expects the original FASTA paths, not the GDB paths
-        // Extract the original paths by removing the .1gdb extension
-        let query_fasta = query_db.with_extension("");
-        let target_fasta = target_db.with_extension("");
-
-        cmd.arg(&query_fasta).arg(&target_fasta);
+        // Use FASTA file names only (FastGA will find .1gdb and .gix in same directory)
+        cmd.arg(query_fasta.file_name().unwrap())
+           .arg(target_fasta.file_name().unwrap())
+           .current_dir(working_dir); // Set working directory
 
         self.report_progress("align", &format!("Running command: {cmd:?}"));
 
@@ -161,10 +171,28 @@ impl AlignmentPipeline {
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
+            let _ = std::fs::remove_file(&temp_aln); // Clean up
             return Err(FastGAError::FastGAExecutionFailed(stderr.to_string()));
         }
 
-        let paf_output = String::from_utf8_lossy(&output.stdout).to_string();
+        // Step 2: Convert .1aln to PAF using ALNtoPAF
+        self.report_progress("align", "Converting .1aln to PAF");
+        let paf_cmd = Command::new(&alnto_paf)
+            .arg("-x") // Extended CIGAR with X/= operators
+            .arg(format!("-T{}", self.config.num_threads))
+            .arg(temp_aln.file_name().unwrap())
+            .current_dir(working_dir)
+            .output()?;
+
+        // Clean up temp .1aln file
+        let _ = std::fs::remove_file(&temp_aln);
+
+        if !paf_cmd.status.success() {
+            let stderr = String::from_utf8_lossy(&paf_cmd.stderr);
+            return Err(FastGAError::Other(format!("ALNtoPAF failed: {stderr}")));
+        }
+
+        let paf_output = String::from_utf8_lossy(&paf_cmd.stdout).to_string();
         self.report_progress("align", &format!("Alignment complete: {} bytes output", paf_output.len()));
 
         Ok(paf_output)

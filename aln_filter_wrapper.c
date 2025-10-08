@@ -27,6 +27,8 @@ void* aln_open(const char *path, int64 *num_alignments) {
     handle->of = open_Aln_Read((char*)path, 1,
                                &handle->num_alignments,
                                &handle->tspace,
+                               NULL,  // gdb1 - will be loaded later
+                               NULL,  // gdb2 - will be loaded later
                                &handle->db1_name,
                                &handle->db2_name,
                                &cpath);

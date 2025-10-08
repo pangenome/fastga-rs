@@ -44,8 +44,13 @@ impl ForkFastGA {
             return Err(FastGAError::FileNotFound(genome2.to_path_buf()));
         }
 
-        // Create orchestrator with full configuration
-        let orchestrator = ForkOrchestrator::new(self.config.clone());
+        // Override output format to PafWithX for parsing
+        // (low-level default is .1aln, but high-level API needs PAF to parse)
+        let mut config = self.config.clone();
+        config.output_format = crate::config::OutputFormat::PafWithX;
+
+        // Create orchestrator with modified configuration
+        let orchestrator = ForkOrchestrator::new(config);
 
         // Run alignment pipeline
         let paf_output = orchestrator.align(genome1, genome2)?;

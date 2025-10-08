@@ -71,7 +71,9 @@ pub struct Config {
 /// Output format for alignments
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum OutputFormat {
-    /// PAF with CIGAR string using X's for mismatches (default)
+    /// .1aln format (ONEcode alignment format, default)
+    Aln,
+    /// PAF with CIGAR string using X's for mismatches
     PafWithX,
     /// PAF with CIGAR string using ='s for matches
     PafWithM,
@@ -98,7 +100,7 @@ impl Default for Config {
             verbose: false,
             symmetric_seeding: false,
             log_file: None,
-            output_format: OutputFormat::PafWithX,
+            output_format: OutputFormat::Aln,
             adaptive_seed_cutoff: None,
             min_chain_coverage: None,
             chain_start_threshold: None,
