@@ -58,16 +58,16 @@
 
 pub mod alignment;
 pub mod aln_reader;
+pub mod api;
 pub mod config;
 pub mod embedded;
 pub mod error;
 pub mod ffi;
-pub mod fork_api;
-pub mod fork_runner;
 pub mod intermediate;
 pub mod onelib;
 pub mod orchestrator;
 pub mod query_set;
+pub mod runner;
 pub mod simple_runner;
 pub mod streaming;
 pub mod timeout;
@@ -83,11 +83,11 @@ pub use query_set::{align_queries, QueryAlignmentIterator, QueryAlignmentSet};
 
 /// Main interface to the FastGA alignment engine.
 ///
-/// This uses the fork-based implementation to avoid FFI hanging issues.
-/// Each utility (FAtoGDB, GIXmake) runs in an isolated child process.
+/// This uses the subprocess-based implementation to avoid FFI hanging issues.
+/// FastGA utilities run as separate processes via system calls.
 #[derive(Debug)]
 pub struct FastGA {
-    inner: fork_api::ForkFastGA,
+    inner: api::ProcessFastGA,
 }
 
 impl FastGA {
@@ -114,7 +114,7 @@ impl FastGA {
     /// ```
     pub fn new(config: Config) -> Result<Self> {
         Ok(FastGA {
-            inner: fork_api::ForkFastGA::new(config)?,
+            inner: api::ProcessFastGA::new(config)?,
         })
     }
 

@@ -1,8 +1,8 @@
 //! Example showing how to integrate FastGA with SweepGA to avoid FFI hanging issues.
 //!
-//! This uses the fork-based API which isolates each utility call in a separate process.
+//! This uses the subprocess-based API which isolates each utility call in a separate process.
 
-use fastga_rs::fork_api::FastGA;
+use fastga_rs::api::FastGA;
 use fastga_rs::Config;
 use std::path::Path;
 use anyhow::Result;
@@ -15,7 +15,7 @@ fn main() -> Result<()> {
         .min_identity(0.7)
         .build();
 
-    // Create the fork-based aligner (recommended for SweepGA)
+    // Create the subprocess-based aligner (recommended for SweepGA)
     let aligner = FastGA::new(config)?;
 
     // Example paths (replace with actual files)
@@ -29,7 +29,7 @@ fn main() -> Result<()> {
         return Ok(());
     }
 
-    println!("Starting FastGA alignment (fork-based implementation)...");
+    println!("Starting FastGA alignment (subprocess-based implementation)...");
 
     // Perform alignment - this will NOT hang unlike the FFI version
     match aligner.align_files(query_path, target_path) {
@@ -60,7 +60,7 @@ fn main() -> Result<()> {
 // Example of how to use this in SweepGA's sweep_algo.rs:
 //
 // ```rust
-// use fastga_rs::fork_api::FastGA;  // Use fork API instead of regular FastGA
+// use fastga_rs::api::FastGA;  // Use subprocess API instead of regular FastGA
 // use fastga_rs::Config;
 //
 // pub fn run_fastga_alignment(
@@ -75,7 +75,7 @@ fn main() -> Result<()> {
 //         .min_identity(0.7)
 //         .build();
 //
-//     // Use fork-based API to avoid hanging
+//     // Use subprocess-based API to avoid hanging
 //     let aligner = FastGA::new(config)?;
 //
 //     // This will NOT hang

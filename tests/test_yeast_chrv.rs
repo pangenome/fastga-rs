@@ -1,5 +1,5 @@
-// Test with real yeast chromosome V data using the fork-based API
-use fastga_rs::fork_api::FastGA;
+// Test with real yeast chromosome V data using the subprocess-based API
+use fastga_rs::api::FastGA;
 use fastga_rs::Config;
 use std::fs::File;
 use std::io::{Write, Read};
@@ -9,8 +9,8 @@ use anyhow::Result;
 use std::process::Command;
 
 #[test]
-fn test_yeast_chrv_self_alignment_fork() -> Result<()> {
-    eprintln!("\n=== Testing Yeast ChrV Self-Alignment with Fork API ===\n");
+fn test_yeast_chrv_self_alignment() -> Result<()> {
+    eprintln!("\n=== Testing Yeast ChrV Self-Alignment ===\n");
 
     let chrv_gz = Path::new("data/cerevisiae.chrV.fa.gz");
     if !chrv_gz.exists() {
@@ -44,8 +44,8 @@ fn test_yeast_chrv_self_alignment_fork() -> Result<()> {
     eprintln!("✓ File starts with: {}", lines[0]);
     assert!(lines[0].starts_with(">"), "Should be valid FASTA");
 
-    // Configure FastGA with fork API
-    eprintln!("\nStep 2: Creating Fork-based FastGA aligner...");
+    // Configure FastGA with subprocess API
+    eprintln!("\nStep 2: Creating Subprocess-based FastGA aligner...");
     let config = Config::builder()
         .num_threads(2)
         .min_alignment_length(1000)  // Only report significant alignments
@@ -53,7 +53,7 @@ fn test_yeast_chrv_self_alignment_fork() -> Result<()> {
         .build();
 
     let aligner = FastGA::new(config)?;
-    eprintln!("✓ Fork-based aligner created");
+    eprintln!("✓ Subprocess-based aligner created");
 
     // Run self-alignment
     eprintln!("\nStep 3: Running chrV self-alignment (this may take a moment)...");
@@ -117,53 +117,5 @@ fn test_yeast_chrv_self_alignment_fork() -> Result<()> {
     Ok(())
 }
 
-#[test]
-fn test_yeast_chrv_pipeline_steps() -> Result<()> {
-    use fastga_rs::fork_runner::{fork_fatogdb, fork_gixmake};
-
-    eprintln!("\n=== Testing Individual Pipeline Steps ===\n");
-
-    let chrv_gz = Path::new("data/cerevisiae.chrV.fa.gz");
-    if !chrv_gz.exists() {
-        eprintln!("Skipping test: chrV data not found");
-        return Ok(());
-    }
-
-    // Prepare test file
-    let temp_dir = tempdir()?;
-    let chrv_path = temp_dir.path().join("chrV.fasta");
-
-    let output = Command::new("gunzip")
-        .arg("-c")
-        .arg(chrv_gz)
-        .output()?;
-
-    std::fs::write(&chrv_path, &output.stdout)?;
-
-    // Step 1: Test FAtoGDB conversion
-    eprintln!("Step 1: Converting chrV to GDB format...");
-    match fork_fatogdb(&chrv_path) {
-        Ok(gdb_path) => {
-            eprintln!("✓ GDB created: {}", gdb_path.display());
-            eprintln!("  Size: {} KB", std::fs::metadata(&gdb_path)?.len() / 1024);
-
-            // Step 2: Test GIXmake indexing
-            eprintln!("\nStep 2: Creating k-mer index...");
-            match fork_gixmake(&gdb_path, 2, 10) {
-                Ok(gix_path) => {
-                    eprintln!("✓ Index created: {}", gix_path.display());
-                    eprintln!("  Size: {} KB", std::fs::metadata(&gix_path)?.len() / 1024);
-                }
-                Err(e) => {
-                    eprintln!("⚠ Index creation failed: {}", e);
-                }
-            }
-        }
-        Err(e) => {
-            eprintln!("✗ GDB conversion failed: {}", e);
-        }
-    }
-
-    eprintln!("\n=== Pipeline Steps Test Complete ===");
-    Ok(())
-}
+// Note: Individual pipeline step tests (FAtoGDB, GIXmake) were removed.
+// FastGA now handles these steps automatically via subprocess orchestration.

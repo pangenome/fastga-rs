@@ -1,167 +1,18 @@
-//! Process runner for FastGA binary
+//! Subprocess runner for FastGA binary
 //!
-//! This module handles running the FastGA binary as a subprocess.
+//! This module handles running the FastGA binary as a subprocess via system calls.
 //! The FastGA binary automatically handles GDB conversion and indexing.
 
-use std::ffi::CString;
-use std::os::raw::{c_char, c_int};
 use std::path::{Path, PathBuf};
 use crate::error::{Result, FastGAError};
 use crate::config::OutputFormat;
-use nix::unistd::{fork, ForkResult};
-use nix::sys::wait::{waitpid, WaitStatus};
-use std::process::exit;
 
-// Link required libraries
-#[link(name = "z")]
-#[link(name = "m")]
-extern "C" {
-    // Wrappers were not implemented, using main functions directly
-}
-
-// Also link to the renamed main functions
-#[link(name = "fatogdb_main", kind = "static")]
-#[link(name = "gixmake_main", kind = "static")]
-extern "C" {
-    fn fatogdb_main(argc: c_int, argv: *const *const c_char) -> c_int;
-    fn gixmake_main(argc: c_int, argv: *const *const c_char) -> c_int;
-}
-
-/// Run FAtoGDB in a forked process (DEPRECATED - FastGA handles this automatically)
-pub fn fork_fatogdb(input_path: &Path) -> Result<PathBuf> {
-    eprintln!("[Fork] Converting {} to GDB format", input_path.display());
-
-    // Handle compressed files: strip .fa.gz or .fasta.gz, not just .gz
-    let gdb_path = if let Some(name) = input_path.file_name() {
-        let name_str = name.to_string_lossy();
-        if name_str.ends_with(".fa.gz") || name_str.ends_with(".fasta.gz") {
-            // Remove .fa.gz or .fasta.gz and add .1gdb
-            let base = if name_str.ends_with(".fa.gz") {
-                &name_str[..name_str.len() - 6]
-            } else {
-                &name_str[..name_str.len() - 9]
-            };
-            input_path.with_file_name(format!("{}.1gdb", base))
-        } else {
-            input_path.with_extension("1gdb")
-        }
-    } else {
-        input_path.with_extension("1gdb")
-    };
-
-    // Check if already exists
-    if gdb_path.exists() {
-        eprintln!("[Fork] GDB already exists");
-        return Ok(gdb_path);
-    }
-
-    // Fork a new process
-    match unsafe { fork() } {
-        Ok(ForkResult::Parent { child }) => {
-            // Parent process - wait for child
-            eprintln!("[Fork] Parent waiting for FAtoGDB child process {child}");
-
-            match waitpid(child, None) {
-                Ok(WaitStatus::Exited(_, code)) => {
-                    eprintln!("[Fork] FAtoGDB exited with code {code}");
-                    if code == 0 && gdb_path.exists() {
-                        Ok(gdb_path)
-                    } else {
-                        Err(FastGAError::Other(format!("FAtoGDB failed with code {code}")))
-                    }
-                }
-                Ok(status) => {
-                    Err(FastGAError::Other(format!("FAtoGDB unexpected status: {status:?}")))
-                }
-                Err(e) => {
-                    Err(FastGAError::Other(format!("Failed to wait for FAtoGDB: {e}")))
-                }
-            }
-        }
-        Ok(ForkResult::Child) => {
-            // Child process - run FAtoGDB
-            eprintln!("[Fork] Child process running FAtoGDB");
-
-            // Use fatogdb_main directly (wrapper not implemented)
-            let args = [CString::new("FAtoGDB").unwrap(),
-                CString::new(input_path.to_string_lossy().to_string()).unwrap()];
-
-            let argv: Vec<*const c_char> = args.iter().map(|s| s.as_ptr()).collect();
-
-            let result = unsafe {
-                fatogdb_main(argv.len() as c_int, argv.as_ptr())
-            };
-
-            exit(result);
-        }
-        Err(e) => {
-            Err(FastGAError::Other(format!("Failed to fork for FAtoGDB: {e}")))
-        }
-    }
-}
-
-/// Run GIXmake in a forked process (DEPRECATED - FastGA handles this automatically)
-pub fn fork_gixmake(gdb_path: &Path, threads: i32, freq: i32) -> Result<PathBuf> {
-    eprintln!("[Fork] Creating index for {}", gdb_path.display());
-
-    let base_name = gdb_path.with_extension("");
-    let gix_path = base_name.with_extension("gix");
-
-    if gix_path.exists() {
-        eprintln!("[Fork] Index already exists");
-        return Ok(gix_path);
-    }
-
-    match unsafe { fork() } {
-        Ok(ForkResult::Parent { child }) => {
-            eprintln!("[Fork] Parent waiting for GIXmake child process {child}");
-
-            match waitpid(child, None) {
-                Ok(WaitStatus::Exited(_, code)) => {
-                    eprintln!("[Fork] GIXmake exited with code {code}");
-                    if code == 0 && gix_path.exists() {
-                        Ok(gix_path)
-                    } else {
-                        Err(FastGAError::Other(format!("GIXmake failed with code {code}")))
-                    }
-                }
-                Ok(status) => {
-                    Err(FastGAError::Other(format!("GIXmake unexpected status: {status:?}")))
-                }
-                Err(e) => {
-                    Err(FastGAError::Other(format!("Failed to wait for GIXmake: {e}")))
-                }
-            }
-        }
-        Ok(ForkResult::Child) => {
-            eprintln!("[Fork] Child process running GIXmake");
-
-            // Use gixmake_main directly since wrapper isn't implemented
-            let args = [CString::new("GIXmake").unwrap(),
-                CString::new(format!("-T{threads}")).unwrap(),
-                CString::new(format!("-f{freq}")).unwrap(),
-                CString::new(base_name.to_string_lossy().to_string()).unwrap()];
-
-            let argv: Vec<*const c_char> = args.iter().map(|s| s.as_ptr()).collect();
-
-            let result = unsafe {
-                gixmake_main(argv.len() as c_int, argv.as_ptr())
-            };
-
-            exit(result);
-        }
-        Err(e) => {
-            Err(FastGAError::Other(format!("Failed to fork for GIXmake: {e}")))
-        }
-    }
-}
-
-/// Orchestrator for running FastGA alignments
-pub struct ForkOrchestrator {
+/// Orchestrator for running FastGA alignments via subprocess
+pub struct Orchestrator {
     pub config: crate::Config,
 }
 
-impl ForkOrchestrator {
+impl Orchestrator {
     pub fn new(config: crate::Config) -> Self {
         Self { config }
     }
@@ -408,28 +259,7 @@ mod tests {
     use tempfile::tempdir;
 
     #[test]
-    fn test_fork_fatogdb() {
-        let dir = tempdir().unwrap();
-        let test_fa = dir.path().join("test.fa");
-
-        let mut file = File::create(&test_fa).unwrap();
-        writeln!(file, ">seq1").unwrap();
-        writeln!(file, "ACGTACGTACGTACGTACGTACGTACGTACGT").unwrap();
-        file.flush().unwrap();
-
-        match fork_fatogdb(&test_fa) {
-            Ok(gdb_path) => {
-                println!("Successfully created GDB: {:?}", gdb_path);
-                assert!(gdb_path.exists());
-            }
-            Err(e) => {
-                println!("FAtoGDB failed (might be expected): {}", e);
-            }
-        }
-    }
-
-    #[test]
-    fn test_fork_orchestrator() {
+    fn test_orchestrator() {
         let dir = tempdir().unwrap();
         let test_fa = dir.path().join("test.fa");
 
@@ -439,7 +269,7 @@ mod tests {
         writeln!(file, "TACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACG").unwrap();
         file.flush().unwrap();
 
-        let orchestrator = ForkOrchestrator::new_simple(1);
+        let orchestrator = Orchestrator::new_simple(1);
 
         match orchestrator.align(&test_fa, &test_fa) {
             Ok(output) => {

@@ -1,27 +1,27 @@
-//! Process-based API for FastGA that avoids FFI issues
+//! Subprocess-based API for FastGA
 //!
-//! This provides a stable API by running FastGA as a subprocess,
+//! This provides a stable API by running FastGA as a subprocess via system calls,
 //! avoiding memory corruption and hanging issues from direct FFI.
 
 use crate::{Config, Alignments, Result, FastGAError};
-use crate::fork_runner::ForkOrchestrator;
+use crate::runner::Orchestrator;
 use std::path::Path;
 use tempfile::TempDir;
 use std::fs;
 
-/// Process-isolated FastGA implementation.
+/// Subprocess-based FastGA implementation.
 ///
 /// This is the recommended implementation as it runs FastGA
-/// in a separate process, avoiding any FFI-related issues.
+/// in a separate process via system calls, avoiding any FFI-related issues.
 #[derive(Debug, Clone)]
-pub struct ForkFastGA {
+pub struct ProcessFastGA {
     pub config: Config,
 }
 
-impl ForkFastGA {
-    /// Create a new fork-based FastGA instance.
+impl ProcessFastGA {
+    /// Create a new subprocess-based FastGA instance.
     pub fn new(config: Config) -> Result<Self> {
-        Ok(ForkFastGA { config })
+        Ok(ProcessFastGA { config })
     }
 
     /// Align two genome files using the FastGA binary.
@@ -50,7 +50,7 @@ impl ForkFastGA {
         config.output_format = crate::config::OutputFormat::PafWithX;
 
         // Create orchestrator with modified configuration
-        let orchestrator = ForkOrchestrator::new(config);
+        let orchestrator = Orchestrator::new(config);
 
         // Run alignment pipeline
         let paf_output = orchestrator.align(genome1, genome2)?;
@@ -111,11 +111,11 @@ impl ForkFastGA {
     }
 }
 
-/// Drop-in replacement for the standard FastGA that uses fork/exec.
+/// Drop-in replacement for the standard FastGA that uses subprocesses.
 ///
 /// This can be used as:
 /// ```no_run
-/// # use fastga_rs::{Config, fork_api::FastGA};
+/// # use fastga_rs::{Config, api::FastGA};
 /// # use anyhow::Result;
 /// # fn main() -> Result<()> {
 /// let config = Config::default();
@@ -123,7 +123,7 @@ impl ForkFastGA {
 /// # Ok(())
 /// # }
 /// ```
-pub type FastGA = ForkFastGA;
+pub type FastGA = ProcessFastGA;
 
 #[cfg(test)]
 mod tests {
@@ -133,7 +133,7 @@ mod tests {
     use tempfile::tempdir;
 
     #[test]
-    fn test_fork_api_basic() {
+    fn test_subprocess_api_basic() {
         let dir = tempdir().unwrap();
         let test_fa = dir.path().join("test.fa");
 
@@ -145,15 +145,15 @@ mod tests {
         file.flush().unwrap();
 
         let config = Config::default();
-        let aligner = ForkFastGA::new(config).unwrap();
+        let aligner = ProcessFastGA::new(config).unwrap();
 
         match aligner.align_files(&test_fa, &test_fa) {
             Ok(alignments) => {
-                eprintln!("✓ Fork API alignment succeeded");
+                eprintln!("✓ Subprocess API alignment succeeded");
                 eprintln!("  Found {} alignments", alignments.len());
             }
             Err(e) => {
-                eprintln!("⚠ Fork API alignment failed: {}", e);
+                eprintln!("⚠ Subprocess API alignment failed: {}", e);
                 eprintln!("  This might be expected for test data");
             }
         }
