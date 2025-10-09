@@ -10,16 +10,17 @@ use onecode::{OneFile, OneSchema};
 
 use crate::alignment::Alignment;
 
-/// Global lock to serialize schema creation (prevents race conditions in ONElib's temp file handling)
+/// Global lock to serialize schema creation (prevents remaining race conditions in ONElib)
 ///
-/// ONElib.c uses a static counter for temp file names which isn't thread-safe.
-/// This lock ensures only one thread creates a schema at a time.
+/// Despite mkstemp() fixes in onecode-rs, there are still race conditions when
+/// multiple threads create schemas concurrently. This serializes creation as a workaround.
+///
+/// See: https://github.com/pangenome/onecode-rs/blob/main/SCHEMA_CLEANUP_BUG.md
 static SCHEMA_CREATION_LOCK: Mutex<()> = Mutex::new(());
 
 /// Create the schema for .1aln files (shared between reader and writer)
-/// Schema creation is serialized via global lock to avoid race conditions in ONElib
 fn create_aln_schema() -> Result<OneSchema> {
-    // Hold lock during schema creation to serialize temp file operations
+    // Serialize schema creation to avoid race conditions
     let _guard = SCHEMA_CREATION_LOCK.lock().unwrap();
 
     let schema_text = r#"

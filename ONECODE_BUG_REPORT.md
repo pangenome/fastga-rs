@@ -1,7 +1,8 @@
 # Bug Report for ONEcode: Thread-Safety Issue in oneSchemaCreateFromText()
 
-**Upstream Issue**: https://github.com/thegenemyers/ONEcode/issues/5 ✅ **FILED**
+**Upstream Issue**: https://github.com/thegenemyers/ONEcode/issues/5 ✅ **FILED & UPDATED**
 **Repository**: https://github.com/thegenemyers/ONEcode
+**Status**: ⚠️ **PARTIALLY FIXED** (mkstemp() in onecode-rs fork, but race still exists)
 **File**: `ONElib.c`, lines 394-421
 **Severity**: High (causes FATAL ERROR in multi-threaded applications)
 
@@ -9,7 +10,9 @@
 
 ## Problem
 
-`oneSchemaCreateFromText()` uses a single static temp file path based on PID, causing race conditions when multiple threads create schemas concurrently.
+**Original issue**: `oneSchemaCreateFromText()` used PID-based temp filenames causing collisions.
+
+**Current issue**: Despite mkstemp() fixes in onecode-rs fork, race conditions still occur during temp file cleanup. Multiple threads can delete each other's temp files.
 
 ## Affected Code
 
@@ -151,9 +154,29 @@ OneSchema *oneSchemaCreateFromText (const char *text)
 - Requires C11 atomics
 - More complex than mkstemp()
 
+## Current Status
+
+### ✅ Fixed in onecode-rs Fork (Partial)
+The onecode-rs fork has mkstemp() implementation ([commit 8beb0ad](https://github.com/pangenome/onecode-rs/commit/8beb0ad)):
+
+```c
+int fd = mkstemp(template);  // Creates unique /tmp/OneSchema.XXXXXX
+```
+
+This fixes the **filename collision** issue.
+
+### ❌ Still Failing in Practice
+Despite mkstemp(), parallel tests still fail:
+
+```
+FATAL ERROR: failed to remove temporary file /tmp/OneSchema.1189288 errno 2
+```
+
+The race is now in **cleanup/file deletion**, not filename generation.
+
 ## Workaround (Currently Used)
 
-In Rust bindings (onecode-rs/fastga-rs), we serialize schema creation:
+In fastga-rs, we serialize ALL schema creation:
 
 ```rust
 static SCHEMA_CREATION_LOCK: Mutex<()> = Mutex::new(());
@@ -163,6 +186,8 @@ fn create_aln_schema() -> Result<OneSchema> {
     OneSchema::from_text(schema_text)  // Only one thread at a time
 }
 ```
+
+**Result**: All tests pass reliably.
 
 This works but prevents concurrent schema creation.
 
