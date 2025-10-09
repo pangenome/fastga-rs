@@ -1,73 +1,17 @@
-/// ONElib FFI bindings for reading/writing .1aln files
+/// ONElib bindings for reading/writing .1aln files
 ///
-/// This provides safe Rust wrappers around the ONElib C library
-/// for working with .1aln alignment files.
+/// This module provides safe Rust wrappers around the ONElib C library
+/// for working with .1aln alignment files, using the onecode crate.
 
-use std::ffi::{CStr, CString};
-use std::os::raw::{c_char, c_int};
 use std::path::Path;
-use std::ptr;
 use anyhow::{Result, bail, Context};
+use onecode::{OneFile, OneSchema};
 
 use crate::alignment::Alignment;
 
-// ONElib C types and functions
-#[repr(C)]
-struct OneFile {
-    _private: [u8; 0], // Opaque type
-}
-
-#[repr(C)]
-struct OneSchema {
-    _private: [u8; 0], // Opaque type
-}
-
-#[repr(C)]
-union OneField {
-    i: i64,
-    r: f64,
-    c: c_char,
-    len: i64,
-}
-
-extern "C" {
-    // Schema creation
-    fn make_Aln_Schema() -> *mut OneSchema;
-    fn oneSchemaDestroy(schema: *mut OneSchema);
-
-    // File operations
-    fn oneFileOpenRead(
-        path: *const c_char,
-        schema: *mut OneSchema,
-        file_type: *const c_char,
-        nthreads: c_int,
-    ) -> *mut OneFile;
-
-    fn oneFileOpenWriteNew(
-        path: *const c_char,
-        schema: *mut OneSchema,
-        file_type: *const c_char,
-        is_binary: bool,
-        nthreads: c_int,
-    ) -> *mut OneFile;
-
-    fn oneFileClose(file: *mut OneFile);
-
-    // Reading
-    fn oneReadLine(file: *mut OneFile) -> c_char;
-
-    // Field accessors (from rust_onelib.c)
-    fn one_int(file: *mut OneFile, index: c_int) -> i64;
-    fn one_real(file: *mut OneFile, index: c_int) -> f64;
-    fn one_char(file: *mut OneFile, index: c_int) -> c_char;
-    fn one_line_type(file: *mut OneFile) -> c_char;
-    fn one_line_count(file: *mut OneFile) -> i64;
-}
-
 /// Reader for .1aln files
 pub struct AlnReader {
-    file: *mut OneFile,
-    schema: *mut OneSchema,
+    file: OneFile,
 }
 
 impl AlnReader {
@@ -75,134 +19,138 @@ impl AlnReader {
     pub fn open<P: AsRef<Path>>(path: P) -> Result<Self> {
         let path_str = path.as_ref().to_str()
             .context("Invalid path")?;
-        let path_cstr = CString::new(path_str)?;
 
-        unsafe {
-            let schema = make_Aln_Schema();
-            if schema.is_null() {
-                bail!("Failed to create .1aln schema");
-            }
+        // Create schema for .1aln files
+        let schema = Self::create_aln_schema()?;
 
-            let type_cstr = CString::new("aln")?;
-            let file = oneFileOpenRead(
-                path_cstr.as_ptr(),
-                schema,
-                type_cstr.as_ptr(),
-                1, // single threaded for now
-            );
+        let file = OneFile::open_read(path_str, Some(&schema), Some("aln"), 1)
+            .context(format!("Failed to open .1aln file: {}", path_str))?;
 
-            if file.is_null() {
-                oneSchemaDestroy(schema);
-                bail!("Failed to open .1aln file: {}", path_str);
-            }
+        Ok(AlnReader { file })
+    }
 
-            Ok(AlnReader { file, schema })
-        }
+    /// Create the schema for .1aln files
+    fn create_aln_schema() -> Result<OneSchema> {
+        // The .1aln schema defines the alignment format
+        let schema_text = r#"
+P 3 aln
+O A 6 3 INT 3 INT 3 INT 3 INT 3 INT 3 INT
+D L 2 3 INT 3 INT
+D R 0
+D Q 1 3 INT
+D M 1 3 INT
+D D 1 3 INT
+D C 1 6 STRING
+D T 1 8 INT_LIST
+D X 1 8 INT_LIST
+D p 2 3 INT 3 INT
+O a 1 3 INT
+G A 0
+"#;
+        OneSchema::from_text(schema_text)
+            .context("Failed to create .1aln schema")
     }
 
     /// Read next alignment from the file
     /// Returns None when EOF is reached
     pub fn read_alignment(&mut self) -> Result<Option<Alignment>> {
-        unsafe {
-            // Skip to next 'A' record (alignment)
-            loop {
-                let line_type = one_line_type(self.file);
+        // Skip to next 'A' record (alignment)
+        loop {
+            let line_type = self.file.line_type();
 
-                // If we're not at an 'A' record, read next line
-                if line_type != b'A' as c_char {
-                    let next = oneReadLine(self.file);
-                    if next == 0 {
-                        return Ok(None); // EOF
-                    }
-                    continue;
+            // If we're not at an 'A' record, read next line
+            if line_type != 'A' {
+                let next = self.file.read_line();
+                if next == '\0' {
+                    return Ok(None); // EOF
                 }
-
-                // We're at an 'A' record
-                // Schema: O A 6 3 INT 3 INT 3 INT 3 INT 3 INT 3 INT
-                // Fields: aread, abpos, aepos, bread, bbpos, bepos
-
-                let a_id = one_int(self.file, 0);
-                let a_beg = one_int(self.file, 1) as u64;
-                let a_end = one_int(self.file, 2) as u64;
-                let b_id = one_int(self.file, 3);
-                let b_beg = one_int(self.file, 4) as u64;
-                let b_end = one_int(self.file, 5) as u64;
-
-                // Read associated data lines until we hit 'T' (trace) or next 'A'
-                let mut matches = 0u64;
-                let mut diffs = 0u64;
-                let mut is_reverse = false;
-                let mut query_len = 0u64;
-                let mut target_len = 0u64;
-
-                loop {
-                    let next_type = oneReadLine(self.file);
-
-                    if next_type == 0 {
-                        break; // EOF
-                    }
-
-                    match next_type as u8 as char {
-                        'T' => {
-                            // Trace record - marks end of this alignment's data
-                            // Read next line to position for next alignment
-                            oneReadLine(self.file);
-                            break;
-                        }
-                        'M' => matches = one_int(self.file, 0) as u64,
-                        'D' => diffs = one_int(self.file, 0) as u64,
-                        'R' => is_reverse = true,
-                        'L' => {
-                            query_len = one_int(self.file, 0) as u64;
-                            target_len = one_int(self.file, 1) as u64;
-                        }
-                        'A' => {
-                            // Hit next alignment without seeing 'T'
-                            // This is valid - not all alignments have traces
-                            break;
-                        }
-                        _ => {
-                            // Skip other records (X, C, Q, etc.)
-                            continue;
-                        }
-                    }
-                }
-
-                // Calculate block length and identity
-                let block_len = a_end - a_beg;
-                let alignment_len = matches + diffs;
-
-                // Identity: matches / total_aligned_bases
-                let identity = if alignment_len > 0 {
-                    matches as f64 / alignment_len as f64
-                } else {
-                    0.0
-                };
-
-                // Create alignment using sequence IDs
-                // Filtering doesn't need actual names, just unique identifiers
-                let alignment = Alignment {
-                    query_name: format!("{}", a_id),
-                    query_len: query_len as usize,
-                    query_start: a_beg as usize,
-                    query_end: a_end as usize,
-                    strand: if is_reverse { '-' } else { '+' },
-                    target_name: format!("{}", b_id),
-                    target_len: target_len as usize,
-                    target_start: b_beg as usize,
-                    target_end: b_end as usize,
-                    matches: matches as usize,
-                    block_len: block_len as usize,
-                    mapping_quality: 60, // Default quality
-                    cigar: String::new(), // Don't extract CIGAR for filtering
-                    tags: Vec::new(),
-                    mismatches: diffs as usize, // Differences include substitutions + indels
-                    gap_opens: 0, // Not tracked in basic .1aln
-                    gap_len: 0,
-                };
-
-                return Ok(Some(alignment));
+                continue;
             }
+
+            // We're at an 'A' record
+            // Schema: O A 6 3 INT 3 INT 3 INT 3 INT 3 INT 3 INT
+            // Fields: aread, abpos, aepos, bread, bbpos, bepos
+            let a_id = self.file.int(0);
+            let a_beg = self.file.int(1) as u64;
+            let a_end = self.file.int(2) as u64;
+            let b_id = self.file.int(3);
+            let b_beg = self.file.int(4) as u64;
+            let b_end = self.file.int(5) as u64;
+
+            // Read associated data lines until we hit 'T' (trace) or next 'A'
+            let mut matches = 0u64;
+            let mut diffs = 0u64;
+            let mut is_reverse = false;
+            let mut query_len = 0u64;
+            let mut target_len = 0u64;
+
+            loop {
+                let next_type = self.file.read_line();
+
+                if next_type == '\0' {
+                    break; // EOF
+                }
+
+                match next_type {
+                    'T' => {
+                        // Trace record - marks end of this alignment's data
+                        // Read next line to position for next alignment
+                        self.file.read_line();
+                        break;
+                    }
+                    'M' => matches = self.file.int(0) as u64,
+                    'D' => diffs = self.file.int(0) as u64,
+                    'R' => is_reverse = true,
+                    'L' => {
+                        query_len = self.file.int(0) as u64;
+                        target_len = self.file.int(1) as u64;
+                    }
+                    'A' => {
+                        // Hit next alignment without seeing 'T'
+                        // This is valid - not all alignments have traces
+                        break;
+                    }
+                    _ => {
+                        // Skip other records (X, C, Q, etc.)
+                        continue;
+                    }
+                }
+            }
+
+            // Calculate block length and identity
+            let block_len = a_end - a_beg;
+            let alignment_len = matches + diffs;
+
+            // Identity: matches / total_aligned_bases
+            let identity = if alignment_len > 0 {
+                matches as f64 / alignment_len as f64
+            } else {
+                0.0
+            };
+
+            // Create alignment using sequence IDs
+            // Filtering doesn't need actual names, just unique identifiers
+            let alignment = Alignment {
+                query_name: format!("{}", a_id),
+                query_len: query_len as usize,
+                query_start: a_beg as usize,
+                query_end: a_end as usize,
+                strand: if is_reverse { '-' } else { '+' },
+                target_name: format!("{}", b_id),
+                target_len: target_len as usize,
+                target_start: b_beg as usize,
+                target_end: b_end as usize,
+                matches: matches as usize,
+                block_len: block_len as usize,
+                mapping_quality: 60, // Default quality
+                cigar: String::new(), // Don't extract CIGAR for filtering
+                tags: Vec::new(),
+                mismatches: diffs as usize, // Differences include substitutions + indels
+                gap_opens: 0, // Not tracked in basic .1aln
+                gap_len: 0,
+            };
+
+            return Ok(Some(alignment));
         }
     }
 
@@ -218,23 +166,9 @@ impl AlnReader {
     }
 }
 
-impl Drop for AlnReader {
-    fn drop(&mut self) {
-        unsafe {
-            if !self.file.is_null() {
-                oneFileClose(self.file);
-            }
-            if !self.schema.is_null() {
-                oneSchemaDestroy(self.schema);
-            }
-        }
-    }
-}
-
 /// Writer for .1aln files
 pub struct AlnWriter {
-    file: *mut OneFile,
-    schema: *mut OneSchema,
+    file: OneFile,
 }
 
 impl AlnWriter {
@@ -242,50 +176,103 @@ impl AlnWriter {
     pub fn create<P: AsRef<Path>>(path: P, binary: bool) -> Result<Self> {
         let path_str = path.as_ref().to_str()
             .context("Invalid path")?;
-        let path_cstr = CString::new(path_str)?;
 
-        unsafe {
-            let schema = make_Aln_Schema();
-            if schema.is_null() {
-                bail!("Failed to create .1aln schema");
-            }
+        // Create schema for .1aln files
+        let schema = Self::create_aln_schema()?;
 
-            let type_cstr = CString::new("aln")?;
-            let file = oneFileOpenWriteNew(
-                path_cstr.as_ptr(),
-                schema,
-                type_cstr.as_ptr(),
-                binary,
-                1, // single threaded
-            );
+        let file = OneFile::open_write_new(path_str, &schema, "aln", binary, 1)
+            .context(format!("Failed to create .1aln file: {}", path_str))?;
 
-            if file.is_null() {
-                oneSchemaDestroy(schema);
-                bail!("Failed to create .1aln file: {}", path_str);
-            }
+        Ok(AlnWriter { file })
+    }
 
-            Ok(AlnWriter { file, schema })
-        }
+    /// Create the schema for .1aln files
+    fn create_aln_schema() -> Result<OneSchema> {
+        // The .1aln schema defines the alignment format
+        let schema_text = r#"
+P 3 aln
+O A 6 3 INT 3 INT 3 INT 3 INT 3 INT 3 INT
+D L 2 3 INT 3 INT
+D R 0
+D Q 1 3 INT
+D M 1 3 INT
+D D 1 3 INT
+D C 1 6 STRING
+D T 1 8 INT_LIST
+D X 1 8 INT_LIST
+D p 2 3 INT 3 INT
+O a 1 3 INT
+G A 0
+"#;
+        OneSchema::from_text(schema_text)
+            .context("Failed to create .1aln schema")
     }
 
     /// Write an alignment to the file
-    pub fn write_alignment(&mut self, _aln: &Alignment) -> Result<()> {
-        // TODO: Implement writing
-        // This is more complex as we need to write multiple line types
-        bail!("Writing .1aln not yet implemented")
-    }
-}
+    pub fn write_alignment(&mut self, aln: &Alignment) -> Result<()> {
+        // Parse sequence IDs from names (they should be numeric IDs for now)
+        let a_id: i64 = aln.query_name.parse()
+            .with_context(|| format!("Query name '{}' is not a numeric ID", aln.query_name))?;
+        let b_id: i64 = aln.target_name.parse()
+            .with_context(|| format!("Target name '{}' is not a numeric ID", aln.target_name))?;
 
-impl Drop for AlnWriter {
-    fn drop(&mut self) {
-        unsafe {
-            if !self.file.is_null() {
-                oneFileClose(self.file);
-            }
-            if !self.schema.is_null() {
-                oneSchemaDestroy(self.schema);
-            }
+        // Write 'A' line: alignment coordinates
+        // Schema: O A 6 3 INT 3 INT 3 INT 3 INT 3 INT 3 INT
+        // Fields: aread, abpos, aepos, bread, bbpos, bepos
+        self.file.set_int(0, a_id);
+        self.file.set_int(1, aln.query_start as i64);
+        self.file.set_int(2, aln.query_end as i64);
+        self.file.set_int(3, b_id);
+        self.file.set_int(4, aln.target_start as i64);
+        self.file.set_int(5, aln.target_end as i64);
+        self.file.write_line('A', 0, None);
+
+        // Write 'R' line if reverse complement
+        if aln.strand == '-' {
+            self.file.write_line('R', 0, None);
         }
+
+        // Write 'L' line: sequence lengths
+        self.file.set_int(0, aln.query_len as i64);
+        self.file.set_int(1, aln.target_len as i64);
+        self.file.write_line('L', 0, None);
+
+        // Write 'M' line: matches
+        self.file.set_int(0, aln.matches as i64);
+        self.file.write_line('M', 0, None);
+
+        // Write 'D' line: differences (mismatches + gaps)
+        let diffs = aln.mismatches + aln.gap_len;
+        self.file.set_int(0, diffs as i64);
+        self.file.write_line('D', 0, None);
+
+        // Write 'Q' line: quality
+        self.file.set_int(0, aln.mapping_quality as i64);
+        self.file.write_line('Q', 0, None);
+
+        // For now, we'll write empty trace lines
+        // TODO: Generate actual trace points if needed
+        self.file.write_line('T', 0, None);
+        self.file.write_line('X', 0, None);
+
+        Ok(())
+    }
+
+    /// Add provenance information to the file header
+    pub fn add_provenance(&mut self, prog: &str, version: &str, command: &str) -> Result<()> {
+        self.file.add_provenance(prog, version, command)?;
+        Ok(())
+    }
+
+    /// Add reference file information to the header
+    pub fn add_reference(&mut self, filename: &str, count: i64) -> Result<()> {
+        self.file.add_reference(filename, count)?;
+        Ok(())
+    }
+
+    /// Finalize the file (called automatically on drop)
+    pub fn finalize(self) {
+        self.file.close();
     }
 }
 
@@ -298,6 +285,95 @@ mod tests {
     fn test_read_1aln() {
         let mut reader = AlnReader::open("test.1aln").unwrap();
         let alignments = reader.read_all().unwrap();
-        assert!(alignments.len() > 0);
+        assert!(!alignments.is_empty());
+    }
+
+    #[test]
+    fn test_write_simple_alignment() {
+        use tempfile::NamedTempFile;
+
+        let temp_file = NamedTempFile::new().unwrap();
+        let temp_path = temp_file.path();
+
+        let mut writer = AlnWriter::create(temp_path, true).unwrap();
+
+        let aln = Alignment {
+            query_name: "0".to_string(),
+            query_len: 10000,
+            query_start: 1000,
+            query_end: 1500,
+            strand: '+',
+            target_name: "1".to_string(),
+            target_len: 20000,
+            target_start: 2000,
+            target_end: 2500,
+            matches: 475,
+            block_len: 500,
+            mapping_quality: 60,
+            cigar: String::new(),
+            tags: Vec::new(),
+            mismatches: 25,
+            gap_opens: 0,
+            gap_len: 0,
+        };
+
+        writer.write_alignment(&aln).unwrap();
+        writer.finalize();
+    }
+
+    #[test]
+    fn test_roundtrip() {
+        use tempfile::NamedTempFile;
+
+        let temp_file = NamedTempFile::new().unwrap();
+        let temp_path = temp_file.path().to_path_buf();
+
+        // Create a test alignment
+        let original_aln = Alignment {
+            query_name: "0".to_string(),
+            query_len: 10000,
+            query_start: 1000,
+            query_end: 1500,
+            strand: '+',
+            target_name: "1".to_string(),
+            target_len: 20000,
+            target_start: 2000,
+            target_end: 2500,
+            matches: 475,
+            block_len: 500,
+            mapping_quality: 60,
+            cigar: String::new(),
+            tags: Vec::new(),
+            mismatches: 25,
+            gap_opens: 0,
+            gap_len: 0,
+        };
+
+        // Write it
+        {
+            let mut writer = AlnWriter::create(&temp_path, true).unwrap();
+            writer.write_alignment(&original_aln).unwrap();
+            writer.finalize();
+        }
+
+        // Read it back
+        let mut reader = AlnReader::open(&temp_path).unwrap();
+        let alignments = reader.read_all().unwrap();
+
+        // Verify
+        assert_eq!(alignments.len(), 1, "Should read exactly one alignment");
+        let read_aln = &alignments[0];
+
+        assert_eq!(read_aln.query_name, original_aln.query_name);
+        assert_eq!(read_aln.query_len, original_aln.query_len);
+        assert_eq!(read_aln.query_start, original_aln.query_start);
+        assert_eq!(read_aln.query_end, original_aln.query_end);
+        assert_eq!(read_aln.strand, original_aln.strand);
+        assert_eq!(read_aln.target_name, original_aln.target_name);
+        assert_eq!(read_aln.target_len, original_aln.target_len);
+        assert_eq!(read_aln.target_start, original_aln.target_start);
+        assert_eq!(read_aln.target_end, original_aln.target_end);
+        assert_eq!(read_aln.matches, original_aln.matches);
+        assert_eq!(read_aln.mapping_quality, original_aln.mapping_quality);
     }
 }
