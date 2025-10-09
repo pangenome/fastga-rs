@@ -4,14 +4,24 @@
 /// for working with .1aln alignment files, using the onecode crate.
 
 use std::path::Path;
+use std::sync::Mutex;
 use anyhow::{Result, bail, Context};
 use onecode::{OneFile, OneSchema};
 
 use crate::alignment::Alignment;
 
+/// Global lock to serialize schema creation (prevents race conditions in ONElib's temp file handling)
+///
+/// ONElib.c uses a static counter for temp file names which isn't thread-safe.
+/// This lock ensures only one thread creates a schema at a time.
+static SCHEMA_CREATION_LOCK: Mutex<()> = Mutex::new(());
+
 /// Create the schema for .1aln files (shared between reader and writer)
+/// Schema creation is serialized via global lock to avoid race conditions in ONElib
 fn create_aln_schema() -> Result<OneSchema> {
-    // The .1aln schema defines the alignment format
+    // Hold lock during schema creation to serialize temp file operations
+    let _guard = SCHEMA_CREATION_LOCK.lock().unwrap();
+
     let schema_text = r#"
 P 3 aln
 O A 6 3 INT 3 INT 3 INT 3 INT 3 INT 3 INT
@@ -27,6 +37,7 @@ D p 2 3 INT 3 INT
 O a 1 3 INT
 G A 0
 "#;
+
     OneSchema::from_text(schema_text)
         .context("Failed to create .1aln schema")
 }
