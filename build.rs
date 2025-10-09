@@ -7,8 +7,6 @@ use std::path::PathBuf;
 fn main() {
     println!("cargo:rerun-if-changed=build.rs");
     println!("cargo:rerun-if-changed=deps/fastga");
-    println!("cargo:rerun-if-changed=aln_filter_wrapper.c");
-    println!("cargo:rerun-if-changed=aln_filter_wrapper.h");
 
     let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap());
     let manifest_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap());
@@ -18,11 +16,11 @@ fn main() {
     println!("cargo:warning=Building FastGA as static library...");
 
     // Build our wrapper functions
+    // Note: aln_filter_wrapper.c removed - now using onecode-rs for .1aln I/O
     let deps_dir = manifest_dir.join("deps");
     cc::Build::new()
         .file(deps_dir.join("rust_wrappers.c"))
         .file(deps_dir.join("rust_onelib.c"))
-        .file(manifest_dir.join("aln_filter_wrapper.c"))
         .file(fastga_dir.join("GDB.c"))
         .file(fastga_dir.join("gene_core.c"))
         .file(fastga_dir.join("ONElib.c"))

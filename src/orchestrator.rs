@@ -3,6 +3,7 @@
 //! This module orchestrates FastGA utilities (FAtoGDB, GIXmake, FastGA)
 //! via system calls instead of FFI to avoid hanging issues.
 
+use crate::binary_finder::find_binary;
 use crate::error::{FastGAError, Result};
 use std::ffi::CString;
 use std::os::raw::{c_char, c_int};
@@ -102,8 +103,7 @@ impl FastGAOrchestrator {
         }
 
         // Call FAtoGDB via system call
-        let bin_dir = env!("FASTGA_BIN_DIR");
-        let fatogdb_bin = Path::new(bin_dir).join("FAtoGDB");
+        let fatogdb_bin = find_binary("FAtoGDB")?;
 
         eprintln!("[FastGA] Calling FAtoGDB: {} {}", fatogdb_bin.display(), fasta_path.display());
 
@@ -138,8 +138,7 @@ impl FastGAOrchestrator {
 
         // Call GIXmake via system call
         // Note: GIXmake doesn't use -f for frequency, it uses -k for k-mer size (default 40)
-        let bin_dir = env!("FASTGA_BIN_DIR");
-        let gixmake_bin = Path::new(bin_dir).join("GIXmake");
+        let gixmake_bin = find_binary("GIXmake")?;
 
         eprintln!("[FastGA] Calling GIXmake: {} -T{} -P{} {}",
                   gixmake_bin.display(), self.num_threads, self.temp_dir, gdb_path);
@@ -169,9 +168,8 @@ impl FastGAOrchestrator {
         eprintln!("[FastGA] run_alignment: Aligning {} vs {}", query_path.display(), target_path.display());
 
         // Call FastGA binary via system call
-        let bin_dir = env!("FASTGA_BIN_DIR");
-        let fastga_bin = Path::new(bin_dir).join("FastGA");
-        let alnto_paf_bin = Path::new(bin_dir).join("ALNtoPAF");
+        let fastga_bin = find_binary("FastGA")?;
+        let alnto_paf_bin = find_binary("ALNtoPAF")?;
 
         // Set working directory to where the input files are and use relative paths
         let working_dir = query_path.parent().ok_or_else(||
@@ -192,13 +190,6 @@ impl FastGAOrchestrator {
                   query_filename.to_string_lossy(), target_filename.to_string_lossy(),
                   working_dir.display());
 
-        // Add the bin directory to PATH so FastGA can find utilities
-        let mut path_env = std::env::var("PATH").unwrap_or_default();
-        if !path_env.is_empty() {
-            path_env.push(':');
-        }
-        path_env.push_str(Path::new(bin_dir).to_str().unwrap());
-
         let mut cmd = std::process::Command::new(&fastga_bin);
         cmd.arg(format!("-1:{}", temp_aln_rel.to_string_lossy()))
            .arg(format!("-T{}", self.num_threads));
@@ -215,8 +206,7 @@ impl FastGAOrchestrator {
 
         cmd.arg(query_filename)
            .arg(target_filename)
-           .current_dir(working_dir)
-           .env("PATH", path_env);
+           .current_dir(working_dir);
 
         let output = cmd.output()
             .map_err(|e| FastGAError::Other(format!("Failed to run FastGA: {}", e)))?;

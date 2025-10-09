@@ -9,9 +9,28 @@ use onecode::{OneFile, OneSchema};
 
 use crate::alignment::Alignment;
 
+/// Alignment record with numeric IDs (compatible with C FFI API)
+///
+/// This struct maintains API compatibility with the old C FFI implementation
+/// while using the new onecode-rs backend.
+#[derive(Debug, Clone)]
+pub struct AlnRecord {
+    pub query_id: i64,
+    pub query_start: i64,
+    pub query_end: i64,
+    pub target_id: i64,
+    pub target_start: i64,
+    pub target_end: i64,
+    pub reverse: i32,
+    pub diffs: i32,
+    pub query_len: i64,
+    pub target_len: i64,
+}
+
 /// Reader for .1aln files
 pub struct AlnReader {
     file: OneFile,
+    num_alignments: i64,
 }
 
 impl AlnReader {
@@ -23,10 +42,38 @@ impl AlnReader {
         // Create schema for .1aln files
         let schema = Self::create_aln_schema()?;
 
-        let file = OneFile::open_read(path_str, Some(&schema), Some("aln"), 1)
+        let mut file = OneFile::open_read(path_str, Some(&schema), Some("aln"), 1)
             .context(format!("Failed to open .1aln file: {}", path_str))?;
 
-        Ok(AlnReader { file })
+        // Count alignments by scanning for 'A' records
+        let num_alignments = Self::count_alignments(&mut file)?;
+
+        Ok(AlnReader { file, num_alignments })
+    }
+
+    /// Count the total number of alignments in the file
+    fn count_alignments(file: &mut OneFile) -> Result<i64> {
+        let mut count = 0i64;
+
+        loop {
+            let line_type = file.read_line();
+            if line_type == '\0' {
+                break; // EOF
+            }
+            if line_type == 'A' {
+                count += 1;
+            }
+        }
+
+        // Reset to beginning
+        file.goto('A', 0)?;
+
+        Ok(count)
+    }
+
+    /// Get total number of alignments in the file
+    pub fn num_alignments(&self) -> i64 {
+        self.num_alignments
     }
 
     /// Create the schema for .1aln files
@@ -163,6 +210,54 @@ G A 0
         }
 
         Ok(alignments)
+    }
+
+    /// Get sequence name by ID (requires embedded GDB in .1aln file)
+    ///
+    /// Note: The `which_db` parameter is kept for API compatibility with the old
+    /// C FFI implementation, but is ignored since onecode-rs automatically
+    /// handles both query and target databases from the embedded GDB.
+    pub fn get_seq_name(&mut self, seq_id: i64, _which_db: i32) -> Result<String> {
+        self.file.get_sequence_name(seq_id)
+            .ok_or_else(|| anyhow::anyhow!("Sequence ID {} not found", seq_id))
+    }
+
+    /// Get all sequence names at once (efficient for bulk lookups)
+    pub fn get_all_seq_names(&mut self) -> std::collections::HashMap<i64, String> {
+        self.file.get_all_sequence_names()
+    }
+
+    /// Read next alignment record (C FFI-compatible API)
+    ///
+    /// This method provides API compatibility with the old C FFI implementation.
+    /// Returns `Ok(Some(record))` if a record was read, `Ok(None)` at EOF.
+    pub fn read_record(&mut self) -> Result<Option<AlnRecord>> {
+        // Read using the Alignment-based API
+        let alignment = match self.read_alignment()? {
+            Some(aln) => aln,
+            None => return Ok(None),
+        };
+
+        // Convert Alignment to AlnRecord
+        let query_id: i64 = alignment.query_name.parse()
+            .unwrap_or(-1); // Default to -1 if not numeric
+        let target_id: i64 = alignment.target_name.parse()
+            .unwrap_or(-1);
+
+        let record = AlnRecord {
+            query_id,
+            query_start: alignment.query_start as i64,
+            query_end: alignment.query_end as i64,
+            target_id,
+            target_start: alignment.target_start as i64,
+            target_end: alignment.target_end as i64,
+            reverse: if alignment.strand == '-' { 1 } else { 0 },
+            diffs: (alignment.mismatches + alignment.gap_len) as i32,
+            query_len: alignment.query_len as i64,
+            target_len: alignment.target_len as i64,
+        };
+
+        Ok(Some(record))
     }
 }
 

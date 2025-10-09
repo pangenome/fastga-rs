@@ -1,7 +1,10 @@
-// Native .1aln reader - direct reading without PAF conversion
+// DEPRECATED: Native .1aln reader using C FFI - replaced by onelib.rs
 //
-// This module provides efficient reading of .1aln alignment files directly
-// using the ONEcode library, avoiding the overhead of converting to PAF format.
+// This module is DEPRECATED and kept only for reference.
+// New code should use `onelib::AlnReader` which uses the onecode-rs crate.
+//
+// Migration path: use `fastga_rs::AlnReader` (now exported from onelib.rs)
+// The API is identical, so no code changes needed in consumers.
 
 use anyhow::Result;
 use std::ffi::{CStr, CString};

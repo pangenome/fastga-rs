@@ -59,6 +59,7 @@
 pub mod alignment;
 pub mod aln_reader;
 pub mod api;
+pub mod binary_finder;
 pub mod config;
 pub mod embedded;
 pub mod error;
@@ -76,7 +77,8 @@ use error::Result;
 use std::path::Path;
 
 pub use alignment::{Alignment, Alignments};
-pub use aln_reader::{AlnReader, AlnRecord, AlnWriter};
+// Use onecode-based implementation (NEW: supports sequence name extraction)
+pub use onelib::{AlnReader, AlnRecord, AlnWriter};
 pub use config::{Config, OutputFormat};
 pub use error::FastGAError;
 pub use query_set::{align_queries, QueryAlignmentIterator, QueryAlignmentSet};

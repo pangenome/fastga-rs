@@ -6,6 +6,7 @@
 use std::path::{Path, PathBuf};
 use crate::error::{Result, FastGAError};
 use crate::config::OutputFormat;
+use crate::binary_finder::find_binary;
 
 /// Orchestrator for running FastGA alignments via subprocess
 pub struct Orchestrator {
@@ -193,50 +194,6 @@ impl Orchestrator {
 
         Ok(String::from_utf8_lossy(&output.stdout).to_string())
     }
-}
-
-fn find_binary(name: &str) -> Result<PathBuf> {
-    // Try our build directory first
-    if let Ok(out_dir) = std::env::var("OUT_DIR") {
-        let path = PathBuf::from(out_dir).join(name);
-        if path.exists() {
-            return Ok(path);
-        }
-    }
-
-    // Try current exe's build directory
-    if let Ok(exe_path) = std::env::current_exe() {
-        if let Some(exe_dir) = exe_path.parent() {
-            let build_dir = exe_dir.join("build");
-            if let Ok(entries) = std::fs::read_dir(&build_dir) {
-                for entry in entries.flatten() {
-                    if entry.file_name().to_string_lossy().starts_with("fastga-rs-") {
-                        let binary = entry.path().join("out").join(name);
-                        if binary.exists() {
-                            return Ok(binary);
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    // Try target directories
-    for profile in &["debug", "release"] {
-        let build_dir = PathBuf::from(format!("target/{profile}/build"));
-        if let Ok(entries) = std::fs::read_dir(&build_dir) {
-            for entry in entries.flatten() {
-                if entry.file_name().to_string_lossy().starts_with("fastga-rs-") {
-                    let binary = entry.path().join("out").join(name);
-                    if binary.exists() {
-                        return Ok(binary);
-                    }
-                }
-            }
-        }
-    }
-
-    Err(FastGAError::Other(format!("{} binary not found", name)))
 }
 
 fn find_fastga_binary() -> Result<PathBuf> {
