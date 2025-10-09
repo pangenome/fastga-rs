@@ -57,7 +57,6 @@
 //! should be synchronized when using the same aligner instance from multiple threads.
 
 pub mod alignment;
-pub mod aln_reader;
 pub mod api;
 pub mod binary_finder;
 pub mod config;
