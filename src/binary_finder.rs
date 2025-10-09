@@ -74,3 +74,67 @@ pub fn find_binary(name: &str) -> Result<PathBuf> {
         name
     )))
 }
+
+/// Get the directory containing FastGA binaries
+///
+/// This is used to set up PATH for FastGA's system() calls
+pub fn get_binary_dir() -> Result<PathBuf> {
+    // Same search logic as find_binary, but return the directory
+
+    // 1. Try same directory as the current executable
+    if let Ok(exe_path) = std::env::current_exe() {
+        if let Some(exe_dir) = exe_path.parent() {
+            let test_binary = exe_dir.join("FastGA");
+            if test_binary.exists() {
+                return Ok(exe_dir.to_path_buf());
+            }
+        }
+    }
+
+    // 2. Try OUT_DIR
+    if let Ok(out_dir) = std::env::var("OUT_DIR") {
+        let path = PathBuf::from(&out_dir);
+        let test_binary = path.join("FastGA");
+        if test_binary.exists() {
+            return Ok(path);
+        }
+    }
+
+    // 3. Try current exe's build directory
+    if let Ok(exe_path) = std::env::current_exe() {
+        if let Some(exe_dir) = exe_path.parent() {
+            let build_dir = exe_dir.join("build");
+            if let Ok(entries) = std::fs::read_dir(&build_dir) {
+                for entry in entries.flatten() {
+                    if entry.file_name().to_string_lossy().starts_with("fastga-rs-") {
+                        let out_dir = entry.path().join("out");
+                        let test_binary = out_dir.join("FastGA");
+                        if test_binary.exists() {
+                            return Ok(out_dir);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // 4. Try target directories
+    for profile in &["debug", "release"] {
+        let build_dir = PathBuf::from(format!("target/{profile}/build"));
+        if let Ok(entries) = std::fs::read_dir(&build_dir) {
+            for entry in entries.flatten() {
+                if entry.file_name().to_string_lossy().starts_with("fastga-rs-") {
+                    let out_dir = entry.path().join("out");
+                    let test_binary = out_dir.join("FastGA");
+                    if test_binary.exists() {
+                        return Ok(out_dir);
+                    }
+                }
+            }
+        }
+    }
+
+    Err(FastGAError::Other(
+        "FastGA binary directory not found".to_string()
+    ))
+}

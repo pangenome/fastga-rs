@@ -25,18 +25,25 @@ fn create_aln_schema() -> Result<OneSchema> {
 
     let schema_text = r#"
 P 3 aln
+D t 1 3 INT
+O g 0
+G S 0
+O S 1 6 STRING
+D G 1 3 INT
+D C 1 3 INT
+D M 1 8 INT_LIST
+O a 0
+G A 0
+D p 2 3 INT 3 INT
 O A 6 3 INT 3 INT 3 INT 3 INT 3 INT 3 INT
 D L 2 3 INT 3 INT
 D R 0
-D Q 1 3 INT
-D M 1 3 INT
 D D 1 3 INT
-D C 1 6 STRING
 D T 1 8 INT_LIST
 D X 1 8 INT_LIST
-D p 2 3 INT 3 INT
-O a 1 3 INT
-G A 0
+D Q 1 3 INT
+D E 1 3 INT
+D Z 1 6 STRING
 "#;
 
     OneSchema::from_text(schema_text)

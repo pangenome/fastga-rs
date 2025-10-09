@@ -38,12 +38,27 @@ impl Orchestrator {
         // Find FastGA binary
         let fastga = find_fastga_binary()?;
 
+        // Get binary directory and set up PATH so FastGA can find its helper utilities
+        let binary_dir = crate::binary_finder::get_binary_dir()?;
+        let new_path = if let Some(old_path) = std::env::var_os("PATH") {
+            let mut paths = std::env::split_paths(&old_path).collect::<Vec<_>>();
+            // Prepend binary_dir to ensure it's found first
+            paths.insert(0, binary_dir.clone());
+            std::env::join_paths(paths).unwrap()
+        } else {
+            // No existing PATH, just use binary_dir
+            std::ffi::OsString::from(binary_dir.as_os_str())
+        };
+
         // Create temp .1aln file in same directory as input
         let working_dir = query_path.parent().ok_or_else(||
             FastGAError::Other("Cannot determine parent directory".to_string()))?;
         let temp_aln = working_dir.join(format!("_tmp_{}.1aln", std::process::id()));
 
         let mut cmd = Command::new(&fastga);
+
+        // Set PATH to include FastGA utilities directory
+        cmd.env("PATH", new_path);
 
         // Use .1aln output format
         cmd.arg(format!("-1:{}", temp_aln.file_name().unwrap().to_string_lossy()));
