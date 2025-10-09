@@ -322,37 +322,3 @@ fn test_error_handling_invalid_file() {
     assert!(result.is_err());
 }
 
-#[test]
-#[ignore = "FastGA GDB files don't support concurrent access from same source files"]
-fn test_concurrent_streaming() -> Result<()> {
-    use std::thread;
-
-    let (_temp_dir, seq1, seq2) = create_test_sequences()?;
-
-    // Test that multiple streaming operations can run concurrently
-    let handles: Vec<_> = (0..3)
-        .map(|i| {
-            let seq1 = seq1.clone();
-            let seq2 = seq2.clone();
-
-            thread::spawn(move || -> Result<usize> {
-                let mut count = 0;
-
-                align_streaming_simple(&seq1, &seq2, |_alignment| {
-                    count += 1;
-                    true
-                })?;
-
-                println!("Thread {} processed {} alignments", i, count);
-                Ok(count)
-            })
-        })
-        .collect();
-
-    for handle in handles {
-        let count = handle.join().unwrap()?;
-        assert!(count > 0);
-    }
-
-    Ok(())
-}
