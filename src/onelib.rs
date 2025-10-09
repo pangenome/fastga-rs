@@ -9,6 +9,28 @@ use onecode::{OneFile, OneSchema};
 
 use crate::alignment::Alignment;
 
+/// Create the schema for .1aln files (shared between reader and writer)
+fn create_aln_schema() -> Result<OneSchema> {
+    // The .1aln schema defines the alignment format
+    let schema_text = r#"
+P 3 aln
+O A 6 3 INT 3 INT 3 INT 3 INT 3 INT 3 INT
+D L 2 3 INT 3 INT
+D R 0
+D Q 1 3 INT
+D M 1 3 INT
+D D 1 3 INT
+D C 1 6 STRING
+D T 1 8 INT_LIST
+D X 1 8 INT_LIST
+D p 2 3 INT 3 INT
+O a 1 3 INT
+G A 0
+"#;
+    OneSchema::from_text(schema_text)
+        .context("Failed to create .1aln schema")
+}
+
 /// Alignment record with numeric IDs (compatible with C FFI API)
 ///
 /// This struct maintains API compatibility with the old C FFI implementation
@@ -40,7 +62,7 @@ impl AlnReader {
             .context("Invalid path")?;
 
         // Create schema for .1aln files
-        let schema = Self::create_aln_schema()?;
+        let schema = create_aln_schema()?;
 
         let mut file = OneFile::open_read(path_str, Some(&schema), Some("aln"), 1)
             .context(format!("Failed to open .1aln file: {}", path_str))?;
@@ -74,28 +96,6 @@ impl AlnReader {
     /// Get total number of alignments in the file
     pub fn num_alignments(&self) -> i64 {
         self.num_alignments
-    }
-
-    /// Create the schema for .1aln files
-    fn create_aln_schema() -> Result<OneSchema> {
-        // The .1aln schema defines the alignment format
-        let schema_text = r#"
-P 3 aln
-O A 6 3 INT 3 INT 3 INT 3 INT 3 INT 3 INT
-D L 2 3 INT 3 INT
-D R 0
-D Q 1 3 INT
-D M 1 3 INT
-D D 1 3 INT
-D C 1 6 STRING
-D T 1 8 INT_LIST
-D X 1 8 INT_LIST
-D p 2 3 INT 3 INT
-O a 1 3 INT
-G A 0
-"#;
-        OneSchema::from_text(schema_text)
-            .context("Failed to create .1aln schema")
     }
 
     /// Read next alignment from the file
@@ -273,34 +273,12 @@ impl AlnWriter {
             .context("Invalid path")?;
 
         // Create schema for .1aln files
-        let schema = Self::create_aln_schema()?;
+        let schema = create_aln_schema()?;
 
         let file = OneFile::open_write_new(path_str, &schema, "aln", binary, 1)
             .context(format!("Failed to create .1aln file: {}", path_str))?;
 
         Ok(AlnWriter { file })
-    }
-
-    /// Create the schema for .1aln files
-    fn create_aln_schema() -> Result<OneSchema> {
-        // The .1aln schema defines the alignment format
-        let schema_text = r#"
-P 3 aln
-O A 6 3 INT 3 INT 3 INT 3 INT 3 INT 3 INT
-D L 2 3 INT 3 INT
-D R 0
-D Q 1 3 INT
-D M 1 3 INT
-D D 1 3 INT
-D C 1 6 STRING
-D T 1 8 INT_LIST
-D X 1 8 INT_LIST
-D p 2 3 INT 3 INT
-O a 1 3 INT
-G A 0
-"#;
-        OneSchema::from_text(schema_text)
-            .context("Failed to create .1aln schema")
     }
 
     /// Write an alignment to the file
