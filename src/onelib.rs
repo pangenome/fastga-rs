@@ -145,10 +145,12 @@ impl AlnReader {
 
             // Read associated data lines until we hit 'T' (trace) or next 'A'
             let mut matches = 0u64;
-            let mut diffs = 0u64;
+            let mut diffs_d_record = 0u64;  // D record (trace-related, not actual diffs)
+            let mut x_list_sum = 0u64;      // Sum of X records (actual edit distances)
             let mut is_reverse = false;
             let mut query_len = 0u64;
             let mut target_len = 0u64;
+            let mut has_x_records = false;
 
             loop {
                 let next_type = self.file.read_line();
@@ -165,7 +167,15 @@ impl AlnReader {
                         break;
                     }
                     'M' => matches = self.file.int(0) as u64,
-                    'D' => diffs = self.file.int(0) as u64,
+                    'D' => diffs_d_record = self.file.int(0) as u64,
+                    'X' => {
+                        // X record contains INT_LIST of per-tracepoint edit distances
+                        // Sum them to get total edit distance (used by ALNtoPAF)
+                        if let Some(x_values) = self.file.int_list() {
+                            x_list_sum = x_values.iter().map(|&v| v as u64).sum();
+                            has_x_records = true;
+                        }
+                    }
                     'R' => is_reverse = true,
                     'L' => {
                         query_len = self.file.int(0) as u64;
@@ -177,22 +187,44 @@ impl AlnReader {
                         break;
                     }
                     _ => {
-                        // Skip other records (X, C, Q, etc.)
+                        // Skip other records (C, Q, etc.)
                         continue;
                     }
                 }
             }
 
-            // Calculate block length and identity
+            // Calculate identity using the SAME formula as ALNtoPAF
+            // Key insight: ALNtoPAF uses sum(X) values, NOT the D record!
+            //
+            // From ALNtoPAF.c:
+            //   del = target_span - query_span (deletions in query)
+            //   divergence = (diffs - del) / query_span
+            //   BUT: diffs comes from sum(X), which is "symmetric" divergence
+            //   So we need to divide by 2: divergence = sum(X) / query_span / 2.0
+            //
+            // Identity: 1 - divergence
             let block_len = a_end - a_beg;
-            let alignment_len = matches + diffs;
+            let query_span = block_len as i64;
+            let target_span = (b_end - b_beg) as i64;
 
-            // Identity: matches / total_aligned_bases
-            let identity = if alignment_len > 0 {
-                matches as f64 / alignment_len as f64
+            // Use X records if available, otherwise fall back to D record
+            let diffs = if has_x_records { x_list_sum } else { diffs_d_record };
+
+            // Calculate divergence: (diffs - del) / query_span / 2.0
+            // where del = target_span - query_span
+            let del = target_span - query_span;
+            let divergence = if query_span > 0 {
+                ((diffs as i64 - del) as f64 / query_span as f64) / 2.0
             } else {
                 0.0
             };
+
+            let identity = (1.0 - divergence).max(0.0).min(1.0); // Clamp to [0, 1]
+
+            // Calculate matches from identity and query_span
+            // (since M record may not be present)
+            let calculated_matches = (identity * query_span as f64) as u64;
+            let final_matches = if matches > 0 { matches } else { calculated_matches };
 
             // Create alignment using sequence IDs
             // Filtering doesn't need actual names, just unique identifiers
@@ -206,12 +238,12 @@ impl AlnReader {
                 target_len: target_len as usize,
                 target_start: b_beg as usize,
                 target_end: b_end as usize,
-                matches: matches as usize,
+                matches: final_matches as usize,  // Use calculated matches
                 block_len: block_len as usize,
                 mapping_quality: 60, // Default quality
                 cigar: String::new(), // Don't extract CIGAR for filtering
                 tags: Vec::new(),
-                mismatches: diffs as usize, // Differences include substitutions + indels
+                mismatches: diffs as usize, // Total diffs from X records (or D as fallback)
                 gap_opens: 0, // Not tracked in basic .1aln
                 gap_len: 0,
             };
