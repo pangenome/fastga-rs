@@ -72,6 +72,7 @@ pub struct AlnRecord {
 pub struct AlnReader {
     file: OneFile,
     num_alignments: i64,
+    contig_offsets: std::collections::HashMap<i64, (i64, i64)>, // contig_id → (sbeg, clen)
 }
 
 impl AlnReader {
@@ -86,10 +87,13 @@ impl AlnReader {
         let mut file = OneFile::open_read(path_str, Some(&schema), Some("aln"), 1)
             .context(format!("Failed to open .1aln file: {}", path_str))?;
 
+        // Extract contig offset information from embedded GDB (for coordinate conversion)
+        let contig_offsets = file.get_all_contig_offsets();
+
         // Count alignments by scanning for 'A' records
         let num_alignments = Self::count_alignments(&mut file)?;
 
-        Ok(AlnReader { file, num_alignments })
+        Ok(AlnReader { file, num_alignments, contig_offsets })
     }
 
     /// Count the total number of alignments in the file
@@ -136,12 +140,13 @@ impl AlnReader {
             // We're at an 'A' record
             // Schema: O A 6 3 INT 3 INT 3 INT 3 INT 3 INT 3 INT
             // Fields: aread, abpos, aepos, bread, bbpos, bepos
+            // NOTE: These are CONTIG coordinates, we need to convert to scaffold coordinates
             let a_id = self.file.int(0);
-            let a_beg = self.file.int(1) as u64;
-            let a_end = self.file.int(2) as u64;
+            let a_beg_contig = self.file.int(1);
+            let a_end_contig = self.file.int(2);
             let b_id = self.file.int(3);
-            let b_beg = self.file.int(4) as u64;
-            let b_end = self.file.int(5) as u64;
+            let b_beg_contig = self.file.int(4);
+            let b_end_contig = self.file.int(5);
 
             // Read associated data lines until we hit 'T' (trace) or next 'A'
             let mut matches = 0u64;
@@ -203,9 +208,9 @@ impl AlnReader {
             //   So we need to divide by 2: divergence = sum(X) / query_span / 2.0
             //
             // Identity: 1 - divergence
-            let block_len = a_end - a_beg;
+            let block_len = (a_end_contig - a_beg_contig) as u64;
             let query_span = block_len as i64;
-            let target_span = (b_end - b_beg) as i64;
+            let target_span = (b_end_contig - b_beg_contig) as i64;
 
             // Use X records if available, otherwise fall back to D record
             let diffs = if has_x_records { x_list_sum } else { diffs_d_record };
@@ -225,6 +230,35 @@ impl AlnReader {
             // (since M record may not be present)
             let calculated_matches = (identity * query_span as f64) as u64;
             let final_matches = if matches > 0 { matches } else { calculated_matches };
+
+            // Convert contig coordinates to scaffold coordinates (matching ALNtoPAF)
+            // Query coordinates (always forward strand in contig space)
+            let (a_beg, a_end) = if let Some(&(a_sbeg, _a_clen)) = self.contig_offsets.get(&a_id) {
+                // Apply offset: scaffold_coord = contig_sbeg + contig_coord
+                ((a_sbeg + a_beg_contig) as u64, (a_sbeg + a_end_contig) as u64)
+            } else {
+                // No contig info - use raw coordinates (shouldn't happen but be defensive)
+                (a_beg_contig as u64, a_end_contig as u64)
+            };
+
+            // Target coordinates (may be reverse complement)
+            let (b_beg, b_end) = if let Some(&(b_sbeg, b_clen)) = self.contig_offsets.get(&b_id) {
+                if is_reverse {
+                    // Reverse strand: use (sbeg + clen) - coord
+                    // Matching ALNtoPAF.c:
+                    //   boff = contigs[bcontig].sbeg + contigs[bcontig].clen
+                    //   target_start = boff - bepos
+                    //   target_end = boff - bbpos
+                    let b_off = b_sbeg + b_clen;
+                    ((b_off - b_end_contig) as u64, (b_off - b_beg_contig) as u64)
+                } else {
+                    // Forward strand: use sbeg + coord
+                    ((b_sbeg + b_beg_contig) as u64, (b_sbeg + b_end_contig) as u64)
+                }
+            } else {
+                // No contig info - use raw coordinates (shouldn't happen with valid .1aln)
+                (b_beg_contig as u64, b_end_contig as u64)
+            };
 
             // Create alignment using sequence IDs
             // Filtering doesn't need actual names, just unique identifiers
