@@ -75,6 +75,69 @@ impl FastGAOrchestrator {
         self.run_alignment(query_path, target_path)
     }
 
+    /// Align and return .1aln file path directly (NO PAF conversion)
+    /// This is the native FastGA output format - most efficient for chaining operations
+    pub fn align_to_1aln(&self, query_path: &Path, target_path: &Path) -> Result<String> {
+        eprintln!("[FastGA] run_alignment: Aligning {} vs {}", query_path.display(), target_path.display());
+
+        // Call FastGA binary via system call
+        let fastga_bin = find_binary("FastGA")?;
+
+        // Set working directory to where the input files are and use relative paths
+        let working_dir = query_path.parent().ok_or_else(||
+            FastGAError::Other("Cannot determine parent directory".to_string()))?;
+
+        let query_filename = query_path.file_name().ok_or_else(||
+            FastGAError::Other("Cannot determine query filename".to_string()))?;
+        let target_filename = target_path.file_name().ok_or_else(||
+            FastGAError::Other("Cannot determine target filename".to_string()))?;
+
+        // Create temporary .1aln file
+        let temp_aln = working_dir.join(format!("_tmp_{}.1aln", std::process::id()));
+        let temp_aln_rel = temp_aln.file_name().unwrap();
+
+        eprintln!("[FastGA] Calling FastGA: {} -1:{} -T{} -i{:.2} {} {} (in dir: {})",
+                  fastga_bin.display(), temp_aln_rel.to_string_lossy(),
+                  self.num_threads, self.min_identity,
+                  query_filename.to_string_lossy(), target_filename.to_string_lossy(),
+                  working_dir.display());
+
+        let mut cmd = std::process::Command::new(&fastga_bin);
+        cmd.arg(format!("-1:{}", temp_aln_rel.to_string_lossy()))
+           .arg(format!("-T{}", self.num_threads));
+
+        // Only add -l if it's > 0 (FastGA's default is 0 anyway)
+        if self.min_length > 0 {
+            cmd.arg(format!("-l{}", self.min_length));
+        }
+
+        // Only add -i if it's > 0.0 (let FastGA use its default otherwise)
+        if self.min_identity > 0.0 {
+            cmd.arg(format!("-i{:.2}", self.min_identity));
+        }
+
+        cmd.arg(query_filename)
+           .arg(target_filename)
+           .current_dir(working_dir);
+
+        let output = cmd.output()
+            .map_err(|e| FastGAError::Other(format!("Failed to run FastGA: {}", e)))?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            // Clean up temp file
+            let _ = std::fs::remove_file(&temp_aln);
+            return Err(FastGAError::Other(format!(
+                "FastGA failed with code {:?}\nstdout: {}\nstderr: {}",
+                output.status.code(), stdout, stderr
+            )));
+        }
+
+        eprintln!("[FastGA] FastGA completed, returning .1aln file: {}", temp_aln.display());
+        Ok(temp_aln.to_string_lossy().to_string())
+    }
+
     /// Convert FASTA to GDB format using FAtoGDB
     pub fn prepare_gdb(&self, fasta_path: &Path) -> Result<String> {
         eprintln!("[FastGA] prepare_gdb: Converting {fasta_path:?} to GDB");

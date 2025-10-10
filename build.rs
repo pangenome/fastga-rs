@@ -99,7 +99,7 @@ fn main() {
     // FastGA's system() calls need these
     use std::process::Command;
 
-    let utilities = ["FastGA", "FAtoGDB", "GIXmake", "GIXrm", "ALNtoPAF"];
+    let utilities = ["FastGA", "FAtoGDB", "GIXmake", "GIXrm", "ALNtoPAF", "PAFtoALN"];
 
     println!("cargo:warning=Building FastGA utilities...");
 
