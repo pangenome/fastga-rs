@@ -50,10 +50,25 @@ impl Orchestrator {
             std::ffi::OsString::from(binary_dir.as_os_str())
         };
 
-        // Create temp .1aln file in same directory as input
+        // FIX 1: Create unique temp directory for FastGA's internal files (GDB, indexes, etc.)
+        // This prevents race conditions when multiple FastGA instances run in parallel
+        let fastga_temp_dir = tempfile::Builder::new()
+            .prefix("fastga_")
+            .tempdir()
+            .map_err(|e| FastGAError::Other(format!("Failed to create temp directory: {e}")))?;
+
+        // FIX 2: Use tempfile for .1aln output to guarantee uniqueness even under heavy contention
         let working_dir = query_path.parent().ok_or_else(||
             FastGAError::Other("Cannot determine parent directory".to_string()))?;
-        let temp_aln = working_dir.join(format!("_tmp_{}.1aln", std::process::id()));
+        let temp_aln_file = tempfile::Builder::new()
+            .prefix("_tmp_")
+            .suffix(".1aln")
+            .tempfile_in(working_dir)
+            .map_err(|e| FastGAError::Other(format!("Failed to create temp .1aln file: {e}")))?;
+        let temp_aln = temp_aln_file.path().to_path_buf();
+        // Keep the file so FastGA can write to it (we'll clean up later)
+        let _ = temp_aln_file.keep()
+            .map_err(|e| FastGAError::Other(format!("Failed to persist temp .1aln file: {e}")))?;
 
         let mut cmd = Command::new(&fastga);
 
@@ -113,9 +128,12 @@ impl Orchestrator {
         }
 
         // Temp directory (needs format -P<dir>)
-        if let Some(ref temp_dir) = self.config.temp_dir {
-            cmd.arg(format!("-P{}", temp_dir.display()));
-        }
+        // Always set this to prevent race conditions with shared /tmp
+        // Use config.temp_dir if specified, otherwise use our unique temp directory
+        let temp_dir_to_use = self.config.temp_dir.as_ref()
+            .map(|p| p.as_path())
+            .unwrap_or(fastga_temp_dir.path());
+        cmd.arg(format!("-P{}", temp_dir_to_use.display()));
 
         // Don't add -g flag - it's not a valid option
         // FastGA will automatically use existing GDB files

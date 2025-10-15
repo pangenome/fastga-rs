@@ -36,7 +36,7 @@ jobs:
         run: cargo build --release
 
       - name: Run tests
-        run: cargo test --release -- --test-threads=1
+        run: cargo test --release
 
       - name: Run clippy
         run: cargo clippy -- -D warnings
