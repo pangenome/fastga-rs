@@ -365,6 +365,113 @@ impl AlnWriter {
         Ok(AlnWriter { file })
     }
 
+    /// Create a new .1aln file with GDB copied from an input .1aln file
+    ///
+    /// This preserves sequence names when filtering alignments.
+    /// The GDB (genome database) records are copied from the input file to the output,
+    /// ensuring sequence IDs can be resolved to names.
+    ///
+    /// This reads the 'g' group (with 'S', 'C', etc. records) from the input
+    /// and writes them to the output before any alignment records.
+    pub fn create_with_gdb<P1: AsRef<Path>, P2: AsRef<Path>>(
+        output_path: P1,
+        input_path: P2,
+        binary: bool,
+    ) -> Result<Self> {
+        let output_str = output_path.as_ref().to_str()
+            .context("Invalid output path")?;
+        let input_str = input_path.as_ref().to_str()
+            .context("Invalid input path")?;
+
+        // Open input file to use as template
+        let schema = create_aln_schema()?;
+        let mut input_file = OneFile::open_read(input_str, Some(&schema), Some("aln"), 1)?;
+
+        // Create output file inheriting header from input
+        let mut output_file = OneFile::open_write_from(output_str, &input_file, binary, 1)?;
+
+        // Copy GDB data (the 'g' group with 'S' records) from input to output
+        Self::copy_gdb_records(&mut input_file, &mut output_file)?;
+
+        Ok(AlnWriter { file: output_file })
+    }
+
+    /// Copy GDB records from input to output
+    ///
+    /// This copies the 'g' group and all its members (S, C, G, M records)
+    /// which contain the sequence names and contig information.
+    fn copy_gdb_records(input: &mut OneFile, output: &mut OneFile) -> Result<()> {
+        unsafe {
+            // Navigate to the first 'g' object (GDB group)
+            if !onecode::ffi::oneGoto(input.as_ptr(), 'g' as i8, 1) {
+                // No GDB in input - this is OK for some files
+                return Ok(());
+            }
+
+            // Write 'g' line to output
+            output.write_line('g', 0, None);
+
+            // Copy all records until we hit the next 'g' or reach alignments ('A')
+            let mut first_line = true;
+            loop {
+                let line_type = input.read_line();
+                if line_type == '\0' {
+                    break; // EOF
+                }
+
+                // Skip the initial 'g' line we're already positioned at
+                if first_line && line_type == 'g' {
+                    first_line = false;
+                    continue;
+                }
+
+                // Stop when we hit next 'g' or reach alignments
+                if line_type == 'g' || line_type == 'A' || line_type == 'a' {
+                    break;
+                }
+
+                // Copy this record to output
+                match line_type {
+                    'S' => {
+                        // Sequence name (STRING)
+                        if let Some(name) = input.string() {
+                            // Write STRING record - need to copy the string to output buffer
+                            // For now, we'll need to use the C FFI directly
+                            let c_name = std::ffi::CString::new(name)?;
+                            let name_ptr = c_name.as_ptr() as *mut std::ffi::c_void;
+                            output.write_line('S', name.len() as i64 + 1, Some(name_ptr));
+                        }
+                    }
+                    'C' => {
+                        // Contig length (INT)
+                        let len = input.int(0);
+                        output.set_int(0, len);
+                        output.write_line('C', 0, None);
+                    }
+                    'G' => {
+                        // Gap length (INT)
+                        let len = input.int(0);
+                        output.set_int(0, len);
+                        output.write_line('G', 0, None);
+                    }
+                    'M' => {
+                        // Mask list (INT_LIST)
+                        if let Some(masks) = input.int_list() {
+                            let len = masks.len() as i64;
+                            let ptr = masks.as_ptr() as *mut std::ffi::c_void;
+                            output.write_line('M', len, Some(ptr));
+                        }
+                    }
+                    _ => {
+                        // Skip unknown line types
+                    }
+                }
+            }
+        }
+
+        Ok(())
+    }
+
     /// Write an alignment to the file
     pub fn write_alignment(&mut self, aln: &Alignment) -> Result<()> {
         // Parse sequence IDs from names (they should be numeric IDs for now)
