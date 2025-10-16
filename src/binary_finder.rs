@@ -70,8 +70,7 @@ pub fn find_binary(name: &str) -> Result<PathBuf> {
     }
 
     Err(FastGAError::Other(format!(
-        "{} binary not found. Install FastGA utilities or ensure they're in PATH.",
-        name
+        "{name} binary not found. Install FastGA utilities or ensure they're in PATH."
     )))
 }
 

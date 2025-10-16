@@ -175,9 +175,9 @@ impl Alignment {
 
         // Parse optional tags and preserve them all
         for field in &fields[12..] {
-            if field.starts_with("cg:Z:") {
+            if let Some(cigar) = field.strip_prefix("cg:Z:") {
                 // Extract CIGAR string
-                alignment.cigar = field[5..].to_string();
+                alignment.cigar = cigar.to_string();
                 alignment.parse_cigar_stats()?;
             }
             // Always preserve the tag as-is

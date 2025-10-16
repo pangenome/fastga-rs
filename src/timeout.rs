@@ -7,6 +7,9 @@ use std::sync::mpsc;
 use std::thread;
 use std::time::Duration;
 
+/// Type alias for progress callback functions
+type ProgressCallback = Box<dyn Fn(&str, &str) + Send + Sync>;
+
 /// Extension trait to add timeout support to FastGA
 pub trait TimeoutExt {
     /// Align files with a timeout
@@ -52,7 +55,7 @@ impl TimeoutExt for FastGA {
 pub struct TimeoutAligner {
     config: Config,
     timeout: Option<Duration>,
-    progress_callback: Option<Box<dyn Fn(&str, &str) + Send + Sync>>,
+    progress_callback: Option<ProgressCallback>,
 }
 
 impl TimeoutAligner {

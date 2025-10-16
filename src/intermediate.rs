@@ -6,10 +6,13 @@ use crate::Config;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+/// Progress callback type for intermediate pipeline steps
+type ProgressCallback = Box<dyn Fn(&str, &str)>;
+
 /// Intermediate pipeline steps for alignment
 pub struct AlignmentPipeline {
     config: Config,
-    progress: Option<Box<dyn Fn(&str, &str)>>,
+    progress: Option<ProgressCallback>,
 }
 
 impl AlignmentPipeline {

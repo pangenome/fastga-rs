@@ -130,8 +130,7 @@ impl Orchestrator {
         // Temp directory (needs format -P<dir>)
         // Always set this to prevent race conditions with shared /tmp
         // Use config.temp_dir if specified, otherwise use our unique temp directory
-        let temp_dir_to_use = self.config.temp_dir.as_ref()
-            .map(|p| p.as_path())
+        let temp_dir_to_use = self.config.temp_dir.as_deref()
             .unwrap_or(fastga_temp_dir.path());
         cmd.arg(format!("-P{}", temp_dir_to_use.display()));
 
@@ -154,7 +153,7 @@ impl Orchestrator {
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
             let _ = std::fs::remove_file(&temp_aln); // Clean up
-            return Err(FastGAError::Other(format!("FastGA failed: {}", stderr)));
+            return Err(FastGAError::Other(format!("FastGA failed: {stderr}")));
         }
 
         // FastGA succeeded, now convert .1aln to desired output format
@@ -200,7 +199,7 @@ impl Orchestrator {
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(FastGAError::Other(format!("ALNtoPAF failed: {}", stderr)));
+            return Err(FastGAError::Other(format!("ALNtoPAF failed: {stderr}")));
         }
 
         Ok(String::from_utf8_lossy(&output.stdout).to_string())
@@ -222,7 +221,7 @@ impl Orchestrator {
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(FastGAError::Other(format!("ALNtoPSL failed: {}", stderr)));
+            return Err(FastGAError::Other(format!("ALNtoPSL failed: {stderr}")));
         }
 
         Ok(String::from_utf8_lossy(&output.stdout).to_string())

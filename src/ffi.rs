@@ -7,9 +7,6 @@ use std::path::Path;
 
 // Link to the FastGA static libraries built by build.rs
 #[link(name = "fastga_main", kind = "static")]
-#[link(name = "fatogdb_main", kind = "static")]
-#[link(name = "gixmake_main", kind = "static")]
-#[link(name = "fastga_common", kind = "static")]
 extern "C" {
     // FastGA's main entry point - we can call this directly
     fn fastga_main(argc: c_int, argv: *const *const c_char) -> c_int;

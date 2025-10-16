@@ -242,8 +242,8 @@ fn parse_paf_line(line: &str) -> Result<Alignment> {
 
     // Parse optional tags
     for tag in &fields[12..] {
-        if tag.starts_with("cg:Z:") {
-            alignment.cigar = tag[5..].to_string();
+        if let Some(cigar) = tag.strip_prefix("cg:Z:") {
+            alignment.cigar = cigar.to_string();
         }
     }
 

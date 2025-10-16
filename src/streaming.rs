@@ -9,6 +9,12 @@ use std::collections::HashMap;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 
+/// Type alias for alignment filter functions
+type AlignmentFilter = Box<dyn Fn(&Alignment) -> bool>;
+
+/// Type alias for alignment aggregator functions
+type AlignmentAggregator = Box<dyn FnMut(&Alignment)>;
+
 /// Builder for configuring streaming alignment operations.
 ///
 /// This builder allows you to configure various aspects of streaming alignment,
@@ -49,8 +55,8 @@ use std::sync::{Arc, Mutex};
 /// ```
 pub struct StreamingAligner {
     config: Config,
-    filters: Vec<Box<dyn Fn(&Alignment) -> bool>>,
-    aggregators: Vec<Box<dyn FnMut(&Alignment)>>,
+    filters: Vec<AlignmentFilter>,
+    aggregators: Vec<AlignmentAggregator>,
 }
 
 /// Statistics from streaming alignment processing

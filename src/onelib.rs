@@ -2,10 +2,9 @@
 ///
 /// This module provides safe Rust wrappers around the ONElib C library
 /// for working with .1aln alignment files, using the onecode crate.
-
 use std::path::Path;
 use std::sync::Mutex;
-use anyhow::{Result, bail, Context};
+use anyhow::{Result, Context};
 use onecode::{OneFile, OneSchema};
 
 use crate::alignment::Alignment;
@@ -85,7 +84,7 @@ impl AlnReader {
         let schema = create_aln_schema()?;
 
         let mut file = OneFile::open_read(path_str, Some(&schema), Some("aln"), 1)
-            .context(format!("Failed to open .1aln file: {}", path_str))?;
+            .with_context(|| format!("Failed to open .1aln file: {path_str}"))?;
 
         // Extract contig offset information from embedded GDB (for coordinate conversion)
         let contig_offsets = file.get_all_contig_offsets();
@@ -210,7 +209,7 @@ impl AlnReader {
             // Identity: 1 - divergence
             let block_len = (a_end_contig - a_beg_contig) as u64;
             let query_span = block_len as i64;
-            let target_span = (b_end_contig - b_beg_contig) as i64;
+            let target_span = b_end_contig - b_beg_contig;
 
             // Use X records if available, otherwise fall back to D record
             let diffs = if has_x_records { x_list_sum } else { diffs_d_record };
@@ -224,7 +223,7 @@ impl AlnReader {
                 0.0
             };
 
-            let identity = (1.0 - divergence).max(0.0).min(1.0); // Clamp to [0, 1]
+            let identity = (1.0 - divergence).clamp(0.0, 1.0); // Clamp to [0, 1]
 
             // Calculate matches from identity and query_span
             // (since M record may not be present)
@@ -263,12 +262,12 @@ impl AlnReader {
             // Create alignment using sequence IDs
             // Filtering doesn't need actual names, just unique identifiers
             let alignment = Alignment {
-                query_name: format!("{}", a_id),
+                query_name: format!("{a_id}"),
                 query_len: query_len as usize,
                 query_start: a_beg as usize,
                 query_end: a_end as usize,
                 strand: if is_reverse { '-' } else { '+' },
-                target_name: format!("{}", b_id),
+                target_name: format!("{b_id}"),
                 target_len: target_len as usize,
                 target_start: b_beg as usize,
                 target_end: b_end as usize,
@@ -304,7 +303,7 @@ impl AlnReader {
     /// handles both query and target databases from the embedded GDB.
     pub fn get_seq_name(&mut self, seq_id: i64, _which_db: i32) -> Result<String> {
         self.file.get_sequence_name(seq_id)
-            .ok_or_else(|| anyhow::anyhow!("Sequence ID {} not found", seq_id))
+            .ok_or_else(|| anyhow::anyhow!("Sequence ID {seq_id} not found"))
     }
 
     /// Get all sequence names at once (efficient for bulk lookups)
@@ -361,7 +360,7 @@ impl AlnWriter {
         let schema = create_aln_schema()?;
 
         let file = OneFile::open_write_new(path_str, &schema, "aln", binary, 1)
-            .context(format!("Failed to create .1aln file: {}", path_str))?;
+            .with_context(|| format!("Failed to create .1aln file: {path_str}"))?;
 
         Ok(AlnWriter { file })
     }
@@ -370,9 +369,9 @@ impl AlnWriter {
     pub fn write_alignment(&mut self, aln: &Alignment) -> Result<()> {
         // Parse sequence IDs from names (they should be numeric IDs for now)
         let a_id: i64 = aln.query_name.parse()
-            .with_context(|| format!("Query name '{}' is not a numeric ID", aln.query_name))?;
+            .with_context(|| format!("Query name '{}' is not a numeric ID", &aln.query_name))?;
         let b_id: i64 = aln.target_name.parse()
-            .with_context(|| format!("Target name '{}' is not a numeric ID", aln.target_name))?;
+            .with_context(|| format!("Target name '{}' is not a numeric ID", &aln.target_name))?;
 
         // Write 'A' line: alignment coordinates
         // Schema: O A 6 3 INT 3 INT 3 INT 3 INT 3 INT 3 INT

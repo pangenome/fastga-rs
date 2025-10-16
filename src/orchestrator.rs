@@ -5,14 +5,13 @@
 
 use crate::binary_finder::find_binary;
 use crate::error::{FastGAError, Result};
-use std::ffi::CString;
 use std::os::raw::{c_char, c_int};
 use std::path::Path;
 
 // FFI bindings only for the core alignment function
 #[link(name = "fastga_main", kind = "static")]
-#[link(name = "fastga_common", kind = "static")]
 extern "C" {
+    #[allow(dead_code)]
     fn fastga_main(argc: c_int, argv: *const *const c_char) -> c_int;
 }
 
@@ -121,7 +120,7 @@ impl FastGAOrchestrator {
            .current_dir(working_dir);
 
         let output = cmd.output()
-            .map_err(|e| FastGAError::Other(format!("Failed to run FastGA: {}", e)))?;
+            .map_err(|e| FastGAError::Other(format!("Failed to run FastGA: {e}")))?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
@@ -173,7 +172,7 @@ impl FastGAOrchestrator {
         let output = std::process::Command::new(&fatogdb_bin)
             .arg(fasta_path)
             .output()
-            .map_err(|e| FastGAError::Other(format!("Failed to run FAtoGDB: {}", e)))?;
+            .map_err(|e| FastGAError::Other(format!("Failed to run FAtoGDB: {e}")))?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
@@ -191,11 +190,11 @@ impl FastGAOrchestrator {
     /// Create k-mer index using GIXmake
     pub fn create_index(&self, gdb_path: &str, _freq: i32) -> Result<()> {
         eprintln!("[FastGA] create_index: Creating index for {gdb_path}");
-        let gix_path = format!("{}.gix", gdb_path);
+        let gix_path = format!("{gdb_path}.gix");
 
         // Check if index already exists
         if Path::new(&gix_path).exists() {
-            eprintln!("[FastGA] Index already exists: {}", gix_path);
+            eprintln!("[FastGA] Index already exists: {gix_path}");
             return Ok(());
         }
 
@@ -211,7 +210,7 @@ impl FastGAOrchestrator {
             .arg(format!("-P{}", self.temp_dir))
             .arg(gdb_path)
             .output()
-            .map_err(|e| FastGAError::Other(format!("Failed to run GIXmake: {}", e)))?;
+            .map_err(|e| FastGAError::Other(format!("Failed to run GIXmake: {e}")))?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
@@ -272,7 +271,7 @@ impl FastGAOrchestrator {
            .current_dir(working_dir);
 
         let output = cmd.output()
-            .map_err(|e| FastGAError::Other(format!("Failed to run FastGA: {}", e)))?;
+            .map_err(|e| FastGAError::Other(format!("Failed to run FastGA: {e}")))?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
@@ -294,7 +293,7 @@ impl FastGAOrchestrator {
             .arg(temp_aln_rel)
             .current_dir(working_dir)
             .output()
-            .map_err(|e| FastGAError::Other(format!("Failed to run ALNtoPAF: {}", e)))?;
+            .map_err(|e| FastGAError::Other(format!("Failed to run ALNtoPAF: {e}")))?;
 
         // Clean up temp .1aln file
         let _ = std::fs::remove_file(&temp_aln);
@@ -313,6 +312,7 @@ impl FastGAOrchestrator {
     }
 
     /// Clean up temporary files
+    #[allow(dead_code)]
     fn cleanup(&self, _gdb_path: &str) -> Result<()> {
         // Optionally remove GDB and GIX files
         // For now, leave them as cache
