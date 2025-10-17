@@ -14,18 +14,30 @@ fn test_orchestrator_full_pipeline() {
     let mut file = File::create(&query_fa).unwrap();
     writeln!(file, ">query1").unwrap();
     for _ in 0..5 {
-        writeln!(file, "ACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGT").unwrap();
+        writeln!(
+            file,
+            "ACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGT"
+        )
+        .unwrap();
     }
     file.flush().unwrap();
 
     let mut file = File::create(&target_fa).unwrap();
     writeln!(file, ">target1").unwrap();
     for _ in 0..5 {
-        writeln!(file, "ACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGT").unwrap();
+        writeln!(
+            file,
+            "ACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGT"
+        )
+        .unwrap();
     }
     writeln!(file, ">target2").unwrap();
     for _ in 0..5 {
-        writeln!(file, "TACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACG").unwrap();
+        writeln!(
+            file,
+            "TACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACG"
+        )
+        .unwrap();
     }
     file.flush().unwrap();
 
@@ -74,14 +86,22 @@ fn test_orchestrator_paf_output() {
     let mut file = File::create(&query_fa).unwrap();
     writeln!(file, ">query1").unwrap();
     for _ in 0..5 {
-        writeln!(file, "ACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGT").unwrap();
+        writeln!(
+            file,
+            "ACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGT"
+        )
+        .unwrap();
     }
     file.flush().unwrap();
 
     let mut file = File::create(&target_fa).unwrap();
     writeln!(file, ">target1").unwrap();
     for _ in 0..5 {
-        writeln!(file, "ACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGT").unwrap();
+        writeln!(
+            file,
+            "ACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGT"
+        )
+        .unwrap();
     }
     file.flush().unwrap();
 

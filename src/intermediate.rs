@@ -1,7 +1,7 @@
 //! API for exposing intermediate steps in the alignment pipeline
 //! This allows for debugging and fine-grained control over the alignment process
 
-use crate::error::{Result, FastGAError};
+use crate::error::{FastGAError, Result};
 use crate::Config;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -60,7 +60,9 @@ impl AlignmentPipeline {
         );
 
         if query_size == 0 || target_size == 0 {
-            return Err(FastGAError::Other("Input files cannot be empty".to_string()));
+            return Err(FastGAError::Other(
+                "Input files cannot be empty".to_string(),
+            ));
         }
 
         Ok(())
@@ -68,7 +70,10 @@ impl AlignmentPipeline {
 
     /// Step 2: Prepare database files (.gdb format)
     pub fn prepare_database(&self, fasta_path: &Path) -> Result<PathBuf> {
-        self.report_progress("database", &format!("Preparing database for {fasta_path:?}"));
+        self.report_progress(
+            "database",
+            &format!("Preparing database for {fasta_path:?}"),
+        );
 
         // Find FAtoGDB binary
         let fatogdb = self.find_utility("FAtoGDB")?;
@@ -89,9 +94,7 @@ impl AlignmentPipeline {
 
         // Run FAtoGDB
         self.report_progress("database", "Converting FASTA to GDB format");
-        let output = Command::new(&fatogdb)
-            .arg(fasta_path)
-            .output()?;
+        let output = Command::new(&fatogdb).arg(fasta_path).output()?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
@@ -149,15 +152,19 @@ impl AlignmentPipeline {
         let target_fasta = target_db.with_extension("");
 
         // Determine working directory for temp .1aln file
-        let working_dir = query_fasta.parent().ok_or_else(||
-            FastGAError::Other("Cannot determine parent directory".to_string()))?;
+        let working_dir = query_fasta
+            .parent()
+            .ok_or_else(|| FastGAError::Other("Cannot determine parent directory".to_string()))?;
         let temp_aln = working_dir.join(format!("_tmp_{}.1aln", std::process::id()));
 
         // Step 1: Run FastGA to create .1aln file
         let mut cmd = Command::new(&fastga);
-        cmd.arg(format!("-1:{}", temp_aln.file_name().unwrap().to_string_lossy()))
-            .arg(format!("-T{}", self.config.num_threads))
-            .arg(format!("-l{}", self.config.min_alignment_length));
+        cmd.arg(format!(
+            "-1:{}",
+            temp_aln.file_name().unwrap().to_string_lossy()
+        ))
+        .arg(format!("-T{}", self.config.num_threads))
+        .arg(format!("-l{}", self.config.min_alignment_length));
 
         if let Some(identity) = self.config.min_identity {
             cmd.arg(format!("-i{identity:.2}"));
@@ -165,8 +172,8 @@ impl AlignmentPipeline {
 
         // Use FASTA file names only (FastGA will find .1gdb and .gix in same directory)
         cmd.arg(query_fasta.file_name().unwrap())
-           .arg(target_fasta.file_name().unwrap())
-           .current_dir(working_dir); // Set working directory
+            .arg(target_fasta.file_name().unwrap())
+            .current_dir(working_dir); // Set working directory
 
         self.report_progress("align", &format!("Running command: {cmd:?}"));
 
@@ -196,7 +203,10 @@ impl AlignmentPipeline {
         }
 
         let paf_output = String::from_utf8_lossy(&paf_cmd.stdout).to_string();
-        self.report_progress("align", &format!("Alignment complete: {} bytes output", paf_output.len()));
+        self.report_progress(
+            "align",
+            &format!("Alignment complete: {} bytes output", paf_output.len()),
+        );
 
         Ok(paf_output)
     }
@@ -206,26 +216,31 @@ impl AlignmentPipeline {
         // Try multiple locations
         let locations = vec![
             // In OUT_DIR
-            std::env::var("OUT_DIR").ok().map(|d| PathBuf::from(d).join(name)),
+            std::env::var("OUT_DIR")
+                .ok()
+                .map(|d| PathBuf::from(d).join(name)),
             // In current exe's build directory
-            std::env::current_exe().ok().and_then(|exe| {
-                exe.parent()
-                    .and_then(|p| p.parent())
-                    .map(|p| p.join("build"))
-            }).and_then(|build_dir| {
-                std::fs::read_dir(&build_dir).ok().and_then(|entries| {
-                    for entry in entries.flatten() {
-                        let name_str = entry.file_name();
-                        if name_str.to_string_lossy().starts_with("fastga-rs-") {
-                            let util_path = entry.path().join("out").join(name);
-                            if util_path.exists() {
-                                return Some(util_path);
+            std::env::current_exe()
+                .ok()
+                .and_then(|exe| {
+                    exe.parent()
+                        .and_then(|p| p.parent())
+                        .map(|p| p.join("build"))
+                })
+                .and_then(|build_dir| {
+                    std::fs::read_dir(&build_dir).ok().and_then(|entries| {
+                        for entry in entries.flatten() {
+                            let name_str = entry.file_name();
+                            if name_str.to_string_lossy().starts_with("fastga-rs-") {
+                                let util_path = entry.path().join("out").join(name);
+                                if util_path.exists() {
+                                    return Some(util_path);
+                                }
                             }
                         }
-                    }
-                    None
-                })
-            }),
+                        None
+                    })
+                }),
             // In target/debug/build
             Some(PathBuf::from("target/debug/build")).and_then(|build_dir| {
                 std::fs::read_dir(&build_dir).ok().and_then(|entries| {

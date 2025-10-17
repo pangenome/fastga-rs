@@ -95,8 +95,8 @@ fn test_chrV_alignment_coverage() -> Result<()> {
 
     // Create aligner with specific configuration for coverage testing
     let config = Config::builder()
-        .min_alignment_length(1000)  // Only count significant alignments
-        .min_identity(0.9)  // High identity threshold
+        .min_alignment_length(1000) // Only count significant alignments
+        .min_identity(0.9) // High identity threshold
         .num_threads(4)
         .build();
 
@@ -121,13 +121,12 @@ fn test_chrV_alignment_coverage() -> Result<()> {
 
     println!("\nPer-query coverage:");
     for (query_name, query_alignments) in &groups {
-        let total_aligned_bp: usize = query_alignments.iter()
+        let total_aligned_bp: usize = query_alignments
+            .iter()
             .map(|a| a.query_end - a.query_start)
             .sum();
 
-        let query_len = query_alignments.first()
-            .map(|a| a.query_len)
-            .unwrap_or(0);
+        let query_len = query_alignments.first().map(|a| a.query_len).unwrap_or(0);
 
         let coverage = if query_len > 0 {
             total_aligned_bp as f64 / query_len as f64
@@ -135,8 +134,14 @@ fn test_chrV_alignment_coverage() -> Result<()> {
             0.0
         };
 
-        println!("  {}: {:.1}x coverage ({} alignments, {} bp aligned / {} bp total)",
-            query_name, coverage, query_alignments.len(), total_aligned_bp, query_len);
+        println!(
+            "  {}: {:.1}x coverage ({} alignments, {} bp aligned / {} bp total)",
+            query_name,
+            coverage,
+            query_alignments.len(),
+            total_aligned_bp,
+            query_len
+        );
 
         // For self-alignment plus alignment to homologous sequences,
         // we expect coverage > 1.0 (at least the self-alignment)
@@ -158,13 +163,18 @@ fn test_chrV_alignment_coverage() -> Result<()> {
     }
 
     // Check alignment quality
-    let high_identity_count = alignments.alignments.iter()
+    let high_identity_count = alignments
+        .alignments
+        .iter()
         .filter(|a| a.identity() > 0.95)
         .count();
 
     println!("\nAlignment quality:");
-    println!("  High-identity alignments (>95%): {} / {}",
-        high_identity_count, alignments.len());
+    println!(
+        "  High-identity alignments (>95%): {} / {}",
+        high_identity_count,
+        alignments.len()
+    );
 
     // For homologous sequences, most alignments should be high-identity
     let high_identity_ratio = high_identity_count as f64 / alignments.len() as f64;
@@ -176,7 +186,9 @@ fn test_chrV_alignment_coverage() -> Result<()> {
     );
 
     // Verify CIGAR format uses extended operators
-    let uses_extended_cigar = alignments.alignments.iter()
+    let uses_extended_cigar = alignments
+        .alignments
+        .iter()
         .any(|a| a.cigar.contains('=') || a.cigar.contains('X'));
 
     assert!(

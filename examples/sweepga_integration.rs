@@ -2,10 +2,10 @@
 //!
 //! This uses the subprocess-based API which isolates each utility call in a separate process.
 
+use anyhow::Result;
 use fastga_rs::api::FastGA;
 use fastga_rs::Config;
 use std::path::Path;
-use anyhow::Result;
 
 fn main() -> Result<()> {
     // Configure FastGA

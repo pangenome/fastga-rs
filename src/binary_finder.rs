@@ -38,7 +38,11 @@ pub fn find_binary(name: &str) -> Result<PathBuf> {
             let build_dir = exe_dir.join("build");
             if let Ok(entries) = std::fs::read_dir(&build_dir) {
                 for entry in entries.flatten() {
-                    if entry.file_name().to_string_lossy().starts_with("fastga-rs-") {
+                    if entry
+                        .file_name()
+                        .to_string_lossy()
+                        .starts_with("fastga-rs-")
+                    {
                         let binary = entry.path().join("out").join(name);
                         if binary.exists() {
                             return Ok(binary);
@@ -54,7 +58,11 @@ pub fn find_binary(name: &str) -> Result<PathBuf> {
         let build_dir = PathBuf::from(format!("target/{profile}/build"));
         if let Ok(entries) = std::fs::read_dir(&build_dir) {
             for entry in entries.flatten() {
-                if entry.file_name().to_string_lossy().starts_with("fastga-rs-") {
+                if entry
+                    .file_name()
+                    .to_string_lossy()
+                    .starts_with("fastga-rs-")
+                {
                     let binary = entry.path().join("out").join(name);
                     if binary.exists() {
                         return Ok(binary);
@@ -105,7 +113,11 @@ pub fn get_binary_dir() -> Result<PathBuf> {
             let build_dir = exe_dir.join("build");
             if let Ok(entries) = std::fs::read_dir(&build_dir) {
                 for entry in entries.flatten() {
-                    if entry.file_name().to_string_lossy().starts_with("fastga-rs-") {
+                    if entry
+                        .file_name()
+                        .to_string_lossy()
+                        .starts_with("fastga-rs-")
+                    {
                         let out_dir = entry.path().join("out");
                         let test_binary = out_dir.join("FastGA");
                         if test_binary.exists() {
@@ -122,7 +134,11 @@ pub fn get_binary_dir() -> Result<PathBuf> {
         let build_dir = PathBuf::from(format!("target/{profile}/build"));
         if let Ok(entries) = std::fs::read_dir(&build_dir) {
             for entry in entries.flatten() {
-                if entry.file_name().to_string_lossy().starts_with("fastga-rs-") {
+                if entry
+                    .file_name()
+                    .to_string_lossy()
+                    .starts_with("fastga-rs-")
+                {
                     let out_dir = entry.path().join("out");
                     let test_binary = out_dir.join("FastGA");
                     if test_binary.exists() {
@@ -134,6 +150,6 @@ pub fn get_binary_dir() -> Result<PathBuf> {
     }
 
     Err(FastGAError::Other(
-        "FastGA binary directory not found".to_string()
+        "FastGA binary directory not found".to_string(),
     ))
 }

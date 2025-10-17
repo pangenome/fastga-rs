@@ -99,7 +99,9 @@ fn main() {
     // FastGA's system() calls need these
     use std::process::Command;
 
-    let utilities = ["FastGA", "FAtoGDB", "GIXmake", "GIXrm", "ALNtoPAF", "PAFtoALN"];
+    let utilities = [
+        "FastGA", "FAtoGDB", "GIXmake", "GIXrm", "ALNtoPAF", "PAFtoALN",
+    ];
 
     println!("cargo:warning=Building FastGA utilities...");
 
@@ -118,7 +120,8 @@ fn main() {
         let src = fastga_dir.join(utility);
         let dst = out_dir.join(utility);
         if src.exists() {
-            std::fs::copy(&src, &dst).unwrap_or_else(|_| panic!("Failed to copy {utility} to OUT_DIR"));
+            std::fs::copy(&src, &dst)
+                .unwrap_or_else(|_| panic!("Failed to copy {utility} to OUT_DIR"));
 
             // Make executable
             #[cfg(unix)]

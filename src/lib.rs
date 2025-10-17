@@ -77,9 +77,9 @@ use std::path::Path;
 
 pub use alignment::{Alignment, Alignments};
 // Use onecode-based implementation (NEW: supports sequence name extraction)
-pub use onelib::{AlnReader, AlnRecord, AlnWriter};
 pub use config::{Config, OutputFormat};
 pub use error::FastGAError;
+pub use onelib::{AlnReader, AlnRecord, AlnWriter};
 pub use query_set::{align_queries, QueryAlignmentIterator, QueryAlignmentSet};
 
 /// Main interface to the FastGA alignment engine.
@@ -164,7 +164,12 @@ impl FastGA {
     ///
     /// # Returns
     /// The number of alignments written
-    pub fn align_to_file(&self, genome1: &Path, genome2: &Path, output_path: &Path) -> Result<usize> {
+    pub fn align_to_file(
+        &self,
+        genome1: &Path,
+        genome2: &Path,
+        output_path: &Path,
+    ) -> Result<usize> {
         self.inner.align_to_file(genome1, genome2, output_path)
     }
 

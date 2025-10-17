@@ -1,6 +1,6 @@
 //! Timeout support for FastGA alignment operations
 
-use crate::error::{Result, FastGAError};
+use crate::error::{FastGAError, Result};
 use crate::{Alignments, Config, FastGA};
 use std::path::Path;
 use std::sync::mpsc;
@@ -41,9 +41,9 @@ impl TimeoutExt for FastGA {
 
         match rx.recv_timeout(timeout) {
             Ok(result) => result,
-            Err(mpsc::RecvTimeoutError::Timeout) => {
-                Err(FastGAError::Other("Alignment operation timed out".to_string()))
-            }
+            Err(mpsc::RecvTimeoutError::Timeout) => Err(FastGAError::Other(
+                "Alignment operation timed out".to_string(),
+            )),
             Err(mpsc::RecvTimeoutError::Disconnected) => {
                 Err(FastGAError::Other("Alignment thread crashed".to_string()))
             }

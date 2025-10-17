@@ -1,9 +1,9 @@
-use fastga_rs::{Config, FastGA, Alignments};
+use anyhow::Result;
 use fastga_rs::intermediate::AlignmentPipeline;
+use fastga_rs::{Alignments, Config, FastGA};
 use std::fs::File;
 use std::io::Write;
 use tempfile::tempdir;
-use anyhow::Result;
 
 #[test]
 fn test_database_preparation_works() -> Result<()> {
@@ -14,11 +14,23 @@ fn test_database_preparation_works() -> Result<()> {
     let mut file = File::create(&test_fa)?;
     // Create a more realistic sequence that might work better with FastGA
     writeln!(file, ">chr1_segment")?;
-    writeln!(file, "ACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGT")?;
-    writeln!(file, "TACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACG")?;
+    writeln!(
+        file,
+        "ACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGT"
+    )?;
+    writeln!(
+        file,
+        "TACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACG"
+    )?;
     writeln!(file, ">chr2_segment")?;
-    writeln!(file, "ACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGT")?;
-    writeln!(file, "TACGTACGTACGTACGTACGTACGTACGTACCTACGTACGTACGTACGTACGTACGTACG")?; // Some variation
+    writeln!(
+        file,
+        "ACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGT"
+    )?;
+    writeln!(
+        file,
+        "TACGTACGTACGTACGTACGTACGTACGTACCTACGTACGTACGTACGTACGTACGTACG"
+    )?; // Some variation
     file.flush()?;
 
     let config = Config::builder()
@@ -26,10 +38,9 @@ fn test_database_preparation_works() -> Result<()> {
         .min_alignment_length(30)
         .build();
 
-    let pipeline = AlignmentPipeline::new(config)
-        .with_progress(|stage, msg| {
-            eprintln!("[Test] {}: {}", stage, msg);
-        });
+    let pipeline = AlignmentPipeline::new(config).with_progress(|stage, msg| {
+        eprintln!("[Test] {}: {}", stage, msg);
+    });
 
     // Test that we can at least prepare the database
     match pipeline.prepare_database(&test_fa) {
@@ -83,9 +94,11 @@ fn test_alignment_api_structure() -> Result<()> {
         Err(e) => {
             eprintln!("Expected failure: {}", e);
             // FastGA has known issues with simple sequences, this is expected
-            assert!(e.to_string().contains("FastGA") ||
-                   e.to_string().contains("Failed") ||
-                   e.to_string().contains("error"));
+            assert!(
+                e.to_string().contains("FastGA")
+                    || e.to_string().contains("Failed")
+                    || e.to_string().contains("error")
+            );
         }
     }
 
@@ -95,7 +108,8 @@ fn test_alignment_api_structure() -> Result<()> {
 #[test]
 fn test_paf_parsing() -> Result<()> {
     // Test that we can at least parse PAF format correctly
-    let paf_line = "query1\t1000\t100\t900\t+\ttarget1\t2000\t200\t1000\t700\t800\t60\tcg:Z:100M\tNM:i:10";
+    let paf_line =
+        "query1\t1000\t100\t900\t+\ttarget1\t2000\t200\t1000\t700\t800\t60\tcg:Z:100M\tNM:i:10";
 
     let alignments = Alignments::from_paf(paf_line)?;
     assert_eq!(alignments.len(), 1, "Should parse one alignment");
@@ -129,8 +143,7 @@ fn test_timeout_api_exists() {
     use std::time::Duration;
 
     let config = Config::default();
-    let aligner = TimeoutAligner::new(config)
-        .with_timeout(Duration::from_secs(1));
+    let aligner = TimeoutAligner::new(config).with_timeout(Duration::from_secs(1));
 
     // Just verify the API exists and can be constructed
     // We don't run it because FastGA has issues

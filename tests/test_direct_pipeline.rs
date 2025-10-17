@@ -1,9 +1,9 @@
+use fastga_rs::{Config, FastGA};
 use std::fs::File;
 use std::io::Write;
 use std::path::Path;
-use tempfile::tempdir;
 use std::process::Command;
-use fastga_rs::{FastGA, Config};
+use tempfile::tempdir;
 
 #[test]
 fn test_prepare_and_align_separately() {
@@ -17,14 +17,46 @@ fn test_prepare_and_align_separately() {
     let mut file = File::create(&test_fa).unwrap();
     writeln!(file, ">sequence1").unwrap();
     // Use a more complex sequence that FastGA can align
-    writeln!(file, "ATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCG").unwrap();
-    writeln!(file, "CTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAG").unwrap();
-    writeln!(file, "GATAGATAGATAGATAGATAGATAGATAGATAGATAGATAGATAGATAGATAGATAGATAGATAGATAGATA").unwrap();
-    writeln!(file, "TCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGA").unwrap();
-    writeln!(file, "AGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCT").unwrap();
-    writeln!(file, "GCATGCATGCATGCATGCATGCATGCATGCATGCATGCATGCATGCATGCATGCATGCATGCATGCATGCAT").unwrap();
-    writeln!(file, "TATCTCGATGCATGCTAGCTACGATCGATGCTAGCTAGCATCGATCGATGCATGCTAGCTAGCGATCGATCG").unwrap();
-    writeln!(file, "CGATCGATGCTAGCTAGCATCGATCGATCGTAGCTAGCTGCATGCATGCTAGCTAGCTAGCGATCGATCGAT").unwrap();
+    writeln!(
+        file,
+        "ATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCG"
+    )
+    .unwrap();
+    writeln!(
+        file,
+        "CTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAG"
+    )
+    .unwrap();
+    writeln!(
+        file,
+        "GATAGATAGATAGATAGATAGATAGATAGATAGATAGATAGATAGATAGATAGATAGATAGATAGATAGATA"
+    )
+    .unwrap();
+    writeln!(
+        file,
+        "TCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGA"
+    )
+    .unwrap();
+    writeln!(
+        file,
+        "AGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCT"
+    )
+    .unwrap();
+    writeln!(
+        file,
+        "GCATGCATGCATGCATGCATGCATGCATGCATGCATGCATGCATGCATGCATGCATGCATGCATGCATGCAT"
+    )
+    .unwrap();
+    writeln!(
+        file,
+        "TATCTCGATGCATGCTAGCTACGATCGATGCTAGCTAGCATCGATCGATGCATGCTAGCTAGCGATCGATCG"
+    )
+    .unwrap();
+    writeln!(
+        file,
+        "CGATCGATGCTAGCTAGCATCGATCGATCGTAGCTAGCTGCATGCATGCTAGCTAGCTAGCGATCGATCGAT"
+    )
+    .unwrap();
     file.flush().unwrap();
 
     let bin_dir = find_bin_dir();
@@ -34,10 +66,7 @@ fn test_prepare_and_align_separately() {
     println!("\n=== Step 1: FAtoGDB ===");
     let fatogdb = format!("{}/FAtoGDB", bin_dir);
     if Path::new(&fatogdb).exists() {
-        let output = Command::new(&fatogdb)
-            .arg(&test_fa)
-            .output()
-            .unwrap();
+        let output = Command::new(&fatogdb).arg(&test_fa).output().unwrap();
 
         if output.status.success() {
             println!("✓ FAtoGDB succeeded");
@@ -49,7 +78,10 @@ fn test_prepare_and_align_separately() {
                 println!("✓ Created {} ({} bytes)", gdb_path.display(), size);
             }
         } else {
-            println!("✗ FAtoGDB failed: {}", String::from_utf8_lossy(&output.stderr));
+            println!(
+                "✗ FAtoGDB failed: {}",
+                String::from_utf8_lossy(&output.stderr)
+            );
         }
     } else {
         println!("✗ FAtoGDB not found at {}", fatogdb);
@@ -77,7 +109,10 @@ fn test_prepare_and_align_separately() {
                 println!("✓ Created {} ({} bytes)", gix_path.display(), size);
             }
         } else {
-            println!("✗ GIXmake failed: {}", String::from_utf8_lossy(&output.stderr));
+            println!(
+                "✗ GIXmake failed: {}",
+                String::from_utf8_lossy(&output.stderr)
+            );
         }
     } else {
         println!("✗ GIXmake not found at {}", gixmake);
@@ -95,7 +130,10 @@ fn test_prepare_and_align_separately() {
     let aligner = FastGA::new(config).unwrap();
     match aligner.align_files(&test_fa, &test_fa) {
         Ok(alignments) => {
-            println!("✓ FastGA alignment succeeded: {} alignments", alignments.len());
+            println!(
+                "✓ FastGA alignment succeeded: {} alignments",
+                alignments.len()
+            );
 
             // Verify we got some alignments
             if alignments.len() > 0 {

@@ -3,10 +3,10 @@
 //! This module handles running the FastGA binary as a subprocess via system calls.
 //! The FastGA binary automatically handles GDB conversion and indexing.
 
-use std::path::{Path, PathBuf};
-use crate::error::{Result, FastGAError};
-use crate::config::OutputFormat;
 use crate::binary_finder::find_binary;
+use crate::config::OutputFormat;
+use crate::error::{FastGAError, Result};
+use std::path::{Path, PathBuf};
 
 /// Orchestrator for running FastGA alignments via subprocess
 pub struct Orchestrator {
@@ -58,8 +58,9 @@ impl Orchestrator {
             .map_err(|e| FastGAError::Other(format!("Failed to create temp directory: {e}")))?;
 
         // FIX 2: Use tempfile for .1aln output to guarantee uniqueness even under heavy contention
-        let working_dir = query_path.parent().ok_or_else(||
-            FastGAError::Other("Cannot determine parent directory".to_string()))?;
+        let working_dir = query_path
+            .parent()
+            .ok_or_else(|| FastGAError::Other("Cannot determine parent directory".to_string()))?;
         let temp_aln_file = tempfile::Builder::new()
             .prefix("_tmp_")
             .suffix(".1aln")
@@ -67,7 +68,8 @@ impl Orchestrator {
             .map_err(|e| FastGAError::Other(format!("Failed to create temp .1aln file: {e}")))?;
         let temp_aln = temp_aln_file.path().to_path_buf();
         // Keep the file so FastGA can write to it (we'll clean up later)
-        let _ = temp_aln_file.keep()
+        let _ = temp_aln_file
+            .keep()
             .map_err(|e| FastGAError::Other(format!("Failed to persist temp .1aln file: {e}")))?;
 
         let mut cmd = Command::new(&fastga);
@@ -76,7 +78,10 @@ impl Orchestrator {
         cmd.env("PATH", new_path);
 
         // Use .1aln output format
-        cmd.arg(format!("-1:{}", temp_aln.file_name().unwrap().to_string_lossy()));
+        cmd.arg(format!(
+            "-1:{}",
+            temp_aln.file_name().unwrap().to_string_lossy()
+        ));
 
         // Basic parameters
         cmd.arg(format!("-T{}", self.config.num_threads));
@@ -130,15 +135,17 @@ impl Orchestrator {
         // Temp directory (needs format -P<dir>)
         // Always set this to prevent race conditions with shared /tmp
         // Use config.temp_dir if specified, otherwise use our unique temp directory
-        let temp_dir_to_use = self.config.temp_dir.as_deref()
+        let temp_dir_to_use = self
+            .config
+            .temp_dir
+            .as_deref()
             .unwrap_or(fastga_temp_dir.path());
         cmd.arg(format!("-P{}", temp_dir_to_use.display()));
 
         // Don't add -g flag - it's not a valid option
         // FastGA will automatically use existing GDB files
 
-        cmd.arg(query_path)
-           .arg(target_path);
+        cmd.arg(query_path).arg(target_path);
 
         // Set working directory to where the input files are
         if let Some(parent_dir) = query_path.parent() {
@@ -147,7 +154,8 @@ impl Orchestrator {
 
         eprintln!("[fastga] Executing: {cmd:?}");
 
-        let output = cmd.output()
+        let output = cmd
+            .output()
             .map_err(|e| FastGAError::Other(format!("Failed to run FastGA: {e}")))?;
 
         if !output.status.success() {
@@ -161,7 +169,7 @@ impl Orchestrator {
             OutputFormat::Aln => {
                 // Return path to .1aln file
                 Ok(temp_aln.to_string_lossy().to_string())
-            },
+            }
             OutputFormat::Psl => self.convert_to_psl(&temp_aln),
             _ => self.convert_to_paf(&temp_aln, self.config.output_format),
         }?;
@@ -182,11 +190,19 @@ impl Orchestrator {
 
         // Set ALNtoPAF flags based on output format
         match format {
-            OutputFormat::PafWithX => { cmd.arg("-x"); },
-            OutputFormat::PafWithM => { cmd.arg("-m"); },
-            OutputFormat::PafShort => { cmd.arg("-s"); },
-            OutputFormat::PafLong => { cmd.arg("-S"); },
-            _ => {}, // Default PAF
+            OutputFormat::PafWithX => {
+                cmd.arg("-x");
+            }
+            OutputFormat::PafWithM => {
+                cmd.arg("-m");
+            }
+            OutputFormat::PafShort => {
+                cmd.arg("-s");
+            }
+            OutputFormat::PafLong => {
+                cmd.arg("-S");
+            }
+            _ => {} // Default PAF
         }
 
         cmd.arg(format!("-T{}", self.config.num_threads));
@@ -194,7 +210,8 @@ impl Orchestrator {
 
         eprintln!("[fastga] Converting .1aln to PAF: {cmd:?}");
 
-        let output = cmd.output()
+        let output = cmd
+            .output()
             .map_err(|e| FastGAError::Other(format!("Failed to run ALNtoPAF: {e}")))?;
 
         if !output.status.success() {
@@ -216,7 +233,8 @@ impl Orchestrator {
 
         eprintln!("[fastga] Converting .1aln to PSL: {cmd:?}");
 
-        let output = cmd.output()
+        let output = cmd
+            .output()
             .map_err(|e| FastGAError::Other(format!("Failed to run ALNtoPSL: {e}")))?;
 
         if !output.status.success() {
@@ -254,8 +272,16 @@ mod tests {
 
         let mut file = File::create(&test_fa).unwrap();
         writeln!(file, ">sequence1").unwrap();
-        writeln!(file, "ACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGT").unwrap();
-        writeln!(file, "TACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACG").unwrap();
+        writeln!(
+            file,
+            "ACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGT"
+        )
+        .unwrap();
+        writeln!(
+            file,
+            "TACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACG"
+        )
+        .unwrap();
         file.flush().unwrap();
 
         let orchestrator = Orchestrator::new_simple(1);

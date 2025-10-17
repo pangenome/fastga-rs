@@ -2,9 +2,9 @@
 //!
 //! This demonstrates all the different ways to get alignment data to disk.
 
-use fastga_rs::{FastGA, Config, Alignments};
-use std::path::Path;
 use anyhow::Result;
+use fastga_rs::{Alignments, Config, FastGA};
+use std::path::Path;
 
 fn main() -> Result<()> {
     let query_path = Path::new("query.fasta");
@@ -46,7 +46,9 @@ fn main() -> Result<()> {
     // Option 3: Process alignments before writing
     println!("\n3. Filtered output (only high-quality alignments):");
     let mut filtered = Alignments::new();
-    filtered.alignments = alignments.alignments.iter()
+    filtered.alignments = alignments
+        .alignments
+        .iter()
         .filter(|a| a.identity() > 0.9)
         .cloned()
         .collect();
@@ -61,7 +63,11 @@ fn main() -> Result<()> {
         let mut query_aligns = Alignments::new();
         query_aligns.alignments = query_alignments.iter().map(|&a| a.clone()).collect();
         query_aligns.write_paf(&filename)?;
-        println!("   ✓ Wrote {} alignments for query '{}'", query_alignments.len(), query_name);
+        println!(
+            "   ✓ Wrote {} alignments for query '{}'",
+            query_alignments.len(),
+            query_name
+        );
     }
 
     // Option 5: Get summary statistics
@@ -69,9 +75,11 @@ fn main() -> Result<()> {
     let summary = alignments.summary();
     println!("   Total alignments: {}", summary.num_alignments);
     println!("   Mean identity: {:.1}%", summary.mean_identity * 100.0);
-    println!("   Identity range: {:.1}% - {:.1}%",
-             summary.min_identity * 100.0,
-             summary.max_identity * 100.0);
+    println!(
+        "   Identity range: {:.1}% - {:.1}%",
+        summary.min_identity * 100.0,
+        summary.max_identity * 100.0
+    );
 
     println!("\n✅ All output methods demonstrated successfully!");
 
@@ -88,16 +96,18 @@ fn process_queries_iteratively() -> Result<()> {
         Path::new("queries.fasta"),
         Path::new("targets.fasta"),
         config,
-        1  // Buffer size
+        1, // Buffer size
     )?;
 
     for query_result in iter {
         let query_set = query_result?;
 
         // Process each query's alignments individually
-        println!("Query '{}' has {} alignments",
-                 query_set.query_name,
-                 query_set.alignment_count());
+        println!(
+            "Query '{}' has {} alignments",
+            query_set.query_name,
+            query_set.alignment_count()
+        );
 
         // Write this query's alignments
         let mut aligns = Alignments::new();

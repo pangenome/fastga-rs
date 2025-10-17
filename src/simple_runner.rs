@@ -1,10 +1,10 @@
 //! Simple runner that uses the FastGA binary directly via subprocess
 //! This avoids the FFI complexity and memory issues
 
-use crate::error::{Result, FastGAError};
+use crate::error::{FastGAError, Result};
+use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
-use std::io::{BufReader, BufRead};
 
 /// Find the FastGA binary
 fn find_fastga_binary() -> Result<PathBuf> {
@@ -22,7 +22,10 @@ fn find_fastga_binary() -> Result<PathBuf> {
 
             for base_dir in search_dirs {
                 if base_dir.exists() {
-                    for entry in std::fs::read_dir(&base_dir).unwrap_or_else(|_| std::fs::read_dir(".").unwrap()).flatten() {
+                    for entry in std::fs::read_dir(&base_dir)
+                        .unwrap_or_else(|_| std::fs::read_dir(".").unwrap())
+                        .flatten()
+                    {
                         let name = entry.file_name();
                         let name_str = name.to_string_lossy();
                         if name_str.starts_with("fastga-rs-") {
@@ -87,7 +90,9 @@ fn find_fastga_binary() -> Result<PathBuf> {
         }
     }
 
-    Err(FastGAError::Other("FastGA binary not found. Please run 'cargo build' first.".to_string()))
+    Err(FastGAError::Other(
+        "FastGA binary not found. Please run 'cargo build' first.".to_string(),
+    ))
 }
 
 /// Simple runner that directly executes FastGA
@@ -101,7 +106,8 @@ pub fn run_fastga_simple(
     let fastga_path = find_fastga_binary()?;
 
     // Make sure the FastGA binary has all utilities in the same directory
-    let bin_dir = fastga_path.parent()
+    let bin_dir = fastga_path
+        .parent()
         .ok_or_else(|| FastGAError::Other("Invalid FastGA path".to_string()))?;
 
     eprintln!("[FastGA] Binary directory: {bin_dir:?}");
@@ -111,7 +117,9 @@ pub fn run_fastga_simple(
     for utility in &["FAtoGDB", "GIXmake"] {
         let util_path = bin_dir.join(utility);
         if !util_path.exists() {
-            return Err(FastGAError::Other(format!("Required utility {utility} not found in {bin_dir:?}")));
+            return Err(FastGAError::Other(format!(
+                "Required utility {utility} not found in {bin_dir:?}"
+            )));
         }
         eprintln!("[FastGA] Found utility: {util_path:?}");
     }
@@ -167,7 +175,8 @@ where
     F: FnMut(&str) -> bool,
 {
     let fastga_path = find_fastga_binary()?;
-    let bin_dir = fastga_path.parent()
+    let bin_dir = fastga_path
+        .parent()
         .ok_or_else(|| FastGAError::Other("Invalid FastGA path".to_string()))?;
 
     let mut cmd = Command::new(&fastga_path);
@@ -193,7 +202,9 @@ where
         .spawn()
         .map_err(|e| FastGAError::Other(format!("Failed to spawn FastGA: {e}")))?;
 
-    let stdout = child.stdout.take()
+    let stdout = child
+        .stdout
+        .take()
         .ok_or_else(|| FastGAError::Other("Failed to capture stdout".to_string()))?;
 
     let reader = BufReader::new(stdout);
@@ -207,13 +218,14 @@ where
         }
     }
 
-    let status = child.wait()
+    let status = child
+        .wait()
         .map_err(|e| FastGAError::Other(format!("Failed to wait for FastGA: {e}")))?;
 
     if !status.success() {
-        return Err(FastGAError::FastGAExecutionFailed(
-            format!("FastGA exited with status: {status}")
-        ));
+        return Err(FastGAError::FastGAExecutionFailed(format!(
+            "FastGA exited with status: {status}"
+        )));
     }
 
     Ok(())

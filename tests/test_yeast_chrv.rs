@@ -1,12 +1,12 @@
 // Test with real yeast chromosome V data using the subprocess-based API
+use anyhow::Result;
 use fastga_rs::api::FastGA;
 use fastga_rs::Config;
 use std::fs::File;
-use std::io::{Write, Read};
+use std::io::{Read, Write};
 use std::path::Path;
-use tempfile::tempdir;
-use anyhow::Result;
 use std::process::Command;
+use tempfile::tempdir;
 
 #[test]
 fn test_yeast_chrv_self_alignment() -> Result<()> {
@@ -14,7 +14,10 @@ fn test_yeast_chrv_self_alignment() -> Result<()> {
 
     let chrv_gz = Path::new("data/cerevisiae.chrV.fa.gz");
     if !chrv_gz.exists() {
-        eprintln!("Skipping test: chrV data file not found at {}", chrv_gz.display());
+        eprintln!(
+            "Skipping test: chrV data file not found at {}",
+            chrv_gz.display()
+        );
         return Ok(());
     }
 
@@ -24,19 +27,23 @@ fn test_yeast_chrv_self_alignment() -> Result<()> {
 
     // Decompress the file
     eprintln!("Step 1: Decompressing chrV data...");
-    let output = Command::new("gunzip")
-        .arg("-c")
-        .arg(chrv_gz)
-        .output()?;
+    let output = Command::new("gunzip").arg("-c").arg(chrv_gz).output()?;
 
     if !output.status.success() {
-        eprintln!("Failed to decompress: {}", String::from_utf8_lossy(&output.stderr));
+        eprintln!(
+            "Failed to decompress: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
         return Err(anyhow::anyhow!("Failed to decompress chrV"));
     }
 
     // Write decompressed data
     std::fs::write(&chrv_path, &output.stdout)?;
-    eprintln!("✓ Decompressed to {} ({} bytes)", chrv_path.display(), output.stdout.len());
+    eprintln!(
+        "✓ Decompressed to {} ({} bytes)",
+        chrv_path.display(),
+        output.stdout.len()
+    );
 
     // Verify it's valid FASTA
     let content = std::fs::read_to_string(&chrv_path)?;
@@ -48,8 +55,8 @@ fn test_yeast_chrv_self_alignment() -> Result<()> {
     eprintln!("\nStep 2: Creating Subprocess-based FastGA aligner...");
     let config = Config::builder()
         .num_threads(2)
-        .min_alignment_length(1000)  // Only report significant alignments
-        .min_identity(0.9)           // High identity for self-alignment
+        .min_alignment_length(1000) // Only report significant alignments
+        .min_identity(0.9) // High identity for self-alignment
         .build();
 
     let aligner = FastGA::new(config)?;
@@ -74,12 +81,14 @@ fn test_yeast_chrv_self_alignment() -> Result<()> {
                 for (i, line) in paf_lines.iter().take(5).enumerate() {
                     let fields: Vec<&str> = line.split('\t').collect();
                     if fields.len() >= 12 {
-                        eprintln!("  [{}] {} -> {}: {} bp, identity={}",
-                                 i + 1,
-                                 fields[0],  // query name
-                                 fields[5],  // target name
-                                 fields[10], // alignment block length
-                                 fields[9]); // identity
+                        eprintln!(
+                            "  [{}] {} -> {}: {} bp, identity={}",
+                            i + 1,
+                            fields[0],  // query name
+                            fields[5],  // target name
+                            fields[10], // alignment block length
+                            fields[9]
+                        ); // identity
                     }
                 }
 
@@ -88,19 +97,21 @@ fn test_yeast_chrv_self_alignment() -> Result<()> {
                 }
 
                 // Verify we got the expected self-alignment
-                assert!(alignments.len() >= 1, "Should have at least one alignment (self)");
+                assert!(
+                    alignments.len() >= 1,
+                    "Should have at least one alignment (self)"
+                );
 
                 // Check if we have the main diagonal alignment
-                let has_full_length = alignments.iter().any(|a| {
-                    a.query_name == a.target_name && a.identity() > 0.99
-                });
+                let has_full_length = alignments
+                    .iter()
+                    .any(|a| a.query_name == a.target_name && a.identity() > 0.99);
 
                 if has_full_length {
                     eprintln!("\n✓ Found full-length self-alignment as expected");
                 } else {
                     eprintln!("\n⚠ No perfect self-alignment found (might be due to repeats)");
                 }
-
             } else {
                 eprintln!("\n⚠ Warning: No alignments found (unexpected for self-alignment)");
             }

@@ -6,7 +6,7 @@
 use crate::error::{FastGAError, Result};
 use std::fmt;
 use std::fs::File;
-use std::io::{Write, BufWriter};
+use std::io::{BufWriter, Write};
 use std::path::Path;
 
 /// A single local alignment between two sequences.
@@ -65,7 +65,6 @@ pub struct Alignment {
 
     /// Total gap length
     pub gap_len: usize,
-
 }
 
 impl Alignment {
@@ -353,7 +352,9 @@ impl Alignments {
 
         // Write alignments
         for a in &self.alignments {
-            writeln!(writer, "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{:.3}\t{}",
+            writeln!(
+                writer,
+                "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{:.3}\t{}",
                 a.query_name,
                 a.query_len,
                 a.query_start,
@@ -396,7 +397,11 @@ impl Alignments {
             write!(writer, r#""matches":{},"#, alignment.matches)?;
             write!(writer, r#""block_len":{},"#, alignment.block_len)?;
             write!(writer, r#""identity":{:.4},"#, alignment.identity())?;
-            write!(writer, r#""mapping_quality":{},"#, alignment.mapping_quality)?;
+            write!(
+                writer,
+                r#""mapping_quality":{},"#,
+                alignment.mapping_quality
+            )?;
             write!(writer, r#""mismatches":{},"#, alignment.mismatches)?;
             write!(writer, r#""gap_opens":{},"#, alignment.gap_opens)?;
             write!(writer, r#""gap_len":{},"#, alignment.gap_len)?;

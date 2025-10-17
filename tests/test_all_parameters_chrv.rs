@@ -1,10 +1,10 @@
 // Test that all FastGA parameters are properly exposed and working
-use fastga_rs::{FastGA, Config};
-use fastga_rs::config::OutputFormat;
-use std::path::Path;
-use tempfile::tempdir;
 use anyhow::Result;
+use fastga_rs::config::OutputFormat;
+use fastga_rs::{Config, FastGA};
+use std::path::Path;
 use std::process::Command;
+use tempfile::tempdir;
 
 #[test]
 fn test_all_parameters_with_chrv() -> Result<()> {
@@ -21,10 +21,7 @@ fn test_all_parameters_with_chrv() -> Result<()> {
     let chrv_path = temp_dir.path().join("chrV.fasta");
     let log_path = temp_dir.path().join("fastga.log");
 
-    let output = Command::new("gunzip")
-        .arg("-c")
-        .arg(chrv_gz)
-        .output()?;
+    let output = Command::new("gunzip").arg("-c").arg(chrv_gz).output()?;
 
     std::fs::write(&chrv_path, &output.stdout)?;
     eprintln!("✓ Prepared chrV file: {} KB", output.stdout.len() / 1024);
@@ -94,7 +91,7 @@ fn test_all_parameters_with_chrv() -> Result<()> {
 
     let config = Config::builder()
         .adaptive_seed_cutoff(20)
-        .frequency(20)  // Match the adaptive_seed_cutoff
+        .frequency(20) // Match the adaptive_seed_cutoff
         .min_chain_coverage(0.5)
         .chain_start_threshold(100)
         .num_threads(2)

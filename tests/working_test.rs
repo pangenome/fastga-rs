@@ -1,9 +1,9 @@
+use anyhow::Result;
 use fastga_rs::{intermediate::AlignmentPipeline, timeout::TimeoutAligner, Config};
 use std::fs::File;
 use std::io::Write;
 use std::time::Duration;
 use tempfile::tempdir;
-use anyhow::Result;
 
 #[test]
 fn test_intermediate_pipeline() -> Result<()> {
@@ -16,7 +16,7 @@ fn test_intermediate_pipeline() -> Result<()> {
     writeln!(file, ">sequence1")?;
     writeln!(file, "ACGTACGTACGTACGTACGTACGTACGTACGT")?;
     writeln!(file, ">sequence2")?;
-    writeln!(file, "ACGTACGTACCTACGTACGTACGTACGTACGT")?;  // One mismatch
+    writeln!(file, "ACGTACGTACCTACGTACGTACGTACGTACGT")?; // One mismatch
     file.flush()?;
 
     // Create pipeline with progress reporting
@@ -25,10 +25,9 @@ fn test_intermediate_pipeline() -> Result<()> {
         .min_alignment_length(10)
         .build();
 
-    let pipeline = AlignmentPipeline::new(config)
-        .with_progress(|stage, msg| {
-            eprintln!("[Test Progress] {}: {}", stage, msg);
-        });
+    let pipeline = AlignmentPipeline::new(config).with_progress(|stage, msg| {
+        eprintln!("[Test Progress] {}: {}", stage, msg);
+    });
 
     // Test individual steps
     eprintln!("\n=== Testing Individual Steps ===");
@@ -121,10 +120,9 @@ fn test_with_real_data() -> Result<()> {
         .min_identity(0.9)
         .build();
 
-    let pipeline = AlignmentPipeline::new(config)
-        .with_progress(|stage, msg| {
-            eprintln!("[Real Data Test] {}: {}", stage, msg);
-        });
+    let pipeline = AlignmentPipeline::new(config).with_progress(|stage, msg| {
+        eprintln!("[Real Data Test] {}: {}", stage, msg);
+    });
 
     match pipeline.run_full_pipeline(&chr_fa, &chr_fa) {
         Ok(paf_output) => {

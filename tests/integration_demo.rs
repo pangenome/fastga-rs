@@ -1,13 +1,13 @@
 //! Integration test demonstrating the full FastGA-RS API
 //! This shows how the library should be used in practice
 
-use fastga_rs::{Config, FastGA, Alignments};
 use fastga_rs::intermediate::AlignmentPipeline;
 use fastga_rs::timeout::{TimeoutAligner, TimeoutExt};
-use std::time::Duration;
-use std::path::Path;
+use fastga_rs::{Alignments, Config, FastGA};
 use std::fs::File;
 use std::io::Write;
+use std::path::Path;
+use std::time::Duration;
 use tempfile::tempdir;
 
 /// Create a test FASTA file with realistic sequences
@@ -59,10 +59,9 @@ fn test_complete_integration_workflow() {
     // Approach 1: Intermediate Pipeline (Most Reliable)
     println!("\n--- Testing Intermediate Pipeline API ---");
     {
-        let pipeline = AlignmentPipeline::new(config.clone())
-            .with_progress(|stage, msg| {
-                println!("  [Pipeline] {}: {}", stage, msg);
-            });
+        let pipeline = AlignmentPipeline::new(config.clone()).with_progress(|stage, msg| {
+            println!("  [Pipeline] {}: {}", stage, msg);
+        });
 
         // Validate inputs
         match pipeline.validate_inputs(&query_path, &target_path) {
@@ -107,9 +106,15 @@ fn test_complete_integration_workflow() {
 
         match aligner.align_files(&query_path, &target_path) {
             Ok(alignments) => {
-                println!("✓ Timeout alignment completed: {} alignments", alignments.len());
+                println!(
+                    "✓ Timeout alignment completed: {} alignments",
+                    alignments.len()
+                );
                 for (i, aln) in alignments.alignments.iter().take(3).enumerate() {
-                    println!("  Alignment {}: {} -> {}", i, aln.query_name, aln.target_name);
+                    println!(
+                        "  Alignment {}: {} -> {}",
+                        i, aln.query_name, aln.target_name
+                    );
                 }
             }
             Err(e) => {
@@ -202,8 +207,7 @@ fn test_error_handling_and_recovery() {
         let test_file = dir.path().join("test.fa");
         create_test_fasta(&test_file, "test", "ACGT").unwrap();
 
-        let aligner = TimeoutAligner::new(config)
-            .with_timeout(Duration::from_millis(1)); // Very short timeout
+        let aligner = TimeoutAligner::new(config).with_timeout(Duration::from_millis(1)); // Very short timeout
 
         // This should timeout or complete very quickly
         let start = std::time::Instant::now();

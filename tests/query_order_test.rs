@@ -11,25 +11,28 @@ fn test_fastga_processes_queries_sequentially() -> Result<()> {
     // Create complex sequences that FastGA can align
     let queries_fasta = temp_dir.path().join("queries.fa");
     // Use yeast-like GC content and complexity
-    let seq_a = "ATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCG".to_string() +
-                "CTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAG" +
-                "GATAGATAGATAGATAGATAGATAGATAGATAGATAGATAGATAGATAGATAGATAGATAG" +
-                "TCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGA" +
-                "AGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCT";
-    let seq_b = "GCATGCATGCATGCATGCATGCATGCATGCATGCATGCATGCATGCATGCATGCATGCAT".to_string() +
-                "TATCGATGCATGCTAGCTACGATCGATGCTAGCTAGCATCGATCGATGCATGCTAGCTAG" +
-                "CGATCGATGCTAGCTAGCATCGATCGATCGTAGCTAGCTGCATGCATGCTAGCTAGCTAG" +
-                "ATGGCTAGCGATCGATGCATGCATCGATCGATGCTAGCTAGCATCGATGCTAGCTAGCAT" +
-                "CGATCGATCGTAGCTAGCTAGCATGCATGCTAGCTAGCTAGCGATCGATCGATGCTAGCT";
-    let seq_c = "GGAATTCCGGAATTCCGGAATTCCGGAATTCCGGAATTCCGGAATTCCGGAATTCCGGAA".to_string() +
-                "TTCCAAGCTTAAGCTTAAGCTTAAGCTTAAGCTTAAGCTTAAGCTTAAGCTTAAGCTTAA" +
-                "GCTTGGATCCGGATCCGGATCCGGATCCGGATCCGGATCCGGATCCGGATCCGGATCCGG" +
-                "ATCCCTCGAGCTCGAGCTCGAGCTCGAGCTCGAGCTCGAGCTCGAGCTCGAGCTCGAGCT" +
-                "CGAGTCTAGATCTAGATCTAGATCTAGATCTAGATCTAGATCTAGATCTAGATCTAGATC";
+    let seq_a = "ATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCG".to_string()
+        + "CTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAG"
+        + "GATAGATAGATAGATAGATAGATAGATAGATAGATAGATAGATAGATAGATAGATAGATAG"
+        + "TCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGA"
+        + "AGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCT";
+    let seq_b = "GCATGCATGCATGCATGCATGCATGCATGCATGCATGCATGCATGCATGCATGCATGCAT".to_string()
+        + "TATCGATGCATGCTAGCTACGATCGATGCTAGCTAGCATCGATCGATGCATGCTAGCTAG"
+        + "CGATCGATGCTAGCTAGCATCGATCGATCGTAGCTAGCTGCATGCATGCTAGCTAGCTAG"
+        + "ATGGCTAGCGATCGATGCATGCATCGATCGATGCTAGCTAGCATCGATGCTAGCTAGCAT"
+        + "CGATCGATCGTAGCTAGCTAGCATGCATGCTAGCTAGCTAGCGATCGATCGATGCTAGCT";
+    let seq_c = "GGAATTCCGGAATTCCGGAATTCCGGAATTCCGGAATTCCGGAATTCCGGAATTCCGGAA".to_string()
+        + "TTCCAAGCTTAAGCTTAAGCTTAAGCTTAAGCTTAAGCTTAAGCTTAAGCTTAAGCTTAA"
+        + "GCTTGGATCCGGATCCGGATCCGGATCCGGATCCGGATCCGGATCCGGATCCGGATCCGG"
+        + "ATCCCTCGAGCTCGAGCTCGAGCTCGAGCTCGAGCTCGAGCTCGAGCTCGAGCTCGAGCT"
+        + "CGAGTCTAGATCTAGATCTAGATCTAGATCTAGATCTAGATCTAGATCTAGATCTAGATC";
 
     std::fs::write(
         &queries_fasta,
-        format!(">query_A\n{}\n>query_B\n{}\n>query_C\n{}\n", seq_a, seq_b, seq_c)
+        format!(
+            ">query_A\n{}\n>query_B\n{}\n>query_C\n{}\n",
+            seq_a, seq_b, seq_c
+        ),
     )?;
 
     // Target sequences with exact matches plus some variants
@@ -39,9 +42,13 @@ fn test_fastga_processes_queries_sequentially() -> Result<()> {
     let target_a = seq_a.clone(); // Exact match to query_A
     let target_b = seq_b.clone(); // Exact match to query_B
     let target_c = seq_c.clone(); // Exact match to query_C
-    // Mixed target with partial matches from each
-    let target_mixed = format!("{}AAAAAA{}TTTTTT{}",
-        &seq_a[..100], &seq_b[..100], &seq_c[..100]);
+                                  // Mixed target with partial matches from each
+    let target_mixed = format!(
+        "{}AAAAAA{}TTTTTT{}",
+        &seq_a[..100],
+        &seq_b[..100],
+        &seq_c[..100]
+    );
 
     std::fs::write(
         &target_fasta,
@@ -109,13 +116,14 @@ fn test_fastga_processes_queries_sequentially() -> Result<()> {
     for alignment in &alignments.alignments {
         match alignment.query_name.as_str() {
             "query_A" => {
-                assert!(!seen_query_b && !seen_query_c,
-                    "query_A alignment found after query_B or query_C!");
+                assert!(
+                    !seen_query_b && !seen_query_c,
+                    "query_A alignment found after query_B or query_C!"
+                );
             }
             "query_B" => {
                 seen_query_b = true;
-                assert!(!seen_query_c,
-                    "query_B alignment found after query_C!");
+                assert!(!seen_query_c, "query_B alignment found after query_C!");
             }
             "query_C" => {
                 seen_query_c = true;
@@ -135,21 +143,21 @@ fn test_query_completeness_with_multiple_targets() -> Result<()> {
     let temp_dir = tempfile::TempDir::new()?;
 
     // Create complex sequences for better alignment
-    let seq1 = "ATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCG".to_string() +
-               "CTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAG" +
-               "GATAGATAGATAGATAGATAGATAGATAGATAGATAGATAGATAGATAGATAGATAGATAG" +
-               "TCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGA" +
-               "AGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCT";
-    let seq2 = "GCATGCATGCATGCATGCATGCATGCATGCATGCATGCATGCATGCATGCATGCATGCAT".to_string() +
-               "TATCGATGCATGCTAGCTACGATCGATGCTAGCTAGCATCGATCGATGCATGCTAGCTAG" +
-               "CGATCGATGCTAGCTAGCATCGATCGATCGTAGCTAGCTGCATGCATGCTAGCTAGCTAG" +
-               "ATGGCTAGCGATCGATGCATGCATCGATCGATGCTAGCTAGCATCGATGCTAGCTAGCAT" +
-               "CGATCGATCGTAGCTAGCTAGCATGCATGCTAGCTAGCTAGCGATCGATCGATGCTAGCT";
+    let seq1 = "ATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCG".to_string()
+        + "CTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAG"
+        + "GATAGATAGATAGATAGATAGATAGATAGATAGATAGATAGATAGATAGATAGATAGATAG"
+        + "TCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGA"
+        + "AGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCT";
+    let seq2 = "GCATGCATGCATGCATGCATGCATGCATGCATGCATGCATGCATGCATGCATGCATGCAT".to_string()
+        + "TATCGATGCATGCTAGCTACGATCGATGCTAGCTAGCATCGATCGATGCATGCTAGCTAG"
+        + "CGATCGATGCTAGCTAGCATCGATCGATCGTAGCTAGCTGCATGCATGCTAGCTAGCTAG"
+        + "ATGGCTAGCGATCGATGCATGCATCGATCGATGCTAGCTAGCATCGATGCTAGCTAGCAT"
+        + "CGATCGATCGTAGCTAGCTAGCATGCATGCTAGCTAGCTAGCGATCGATCGATGCTAGCT";
 
     let queries_fasta = temp_dir.path().join("queries.fa");
     std::fs::write(
         &queries_fasta,
-        format!(">query_1\n{}\n>query_2\n{}\n", seq1, seq2)
+        format!(">query_1\n{}\n>query_2\n{}\n", seq1, seq2),
     )?;
 
     // Multiple targets with good matches

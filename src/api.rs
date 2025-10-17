@@ -3,11 +3,11 @@
 //! This provides a stable API by running FastGA as a subprocess via system calls,
 //! avoiding memory corruption and hanging issues from direct FFI.
 
-use crate::{Config, Alignments, Result, FastGAError};
 use crate::runner::Orchestrator;
+use crate::{Alignments, Config, FastGAError, Result};
+use std::fs;
 use std::path::Path;
 use tempfile::TempDir;
-use std::fs;
 
 /// Subprocess-based FastGA implementation.
 ///
@@ -33,8 +33,11 @@ impl ProcessFastGA {
     ///
     /// Running as a subprocess avoids FFI memory issues.
     pub fn align_files(&self, genome1: &Path, genome2: &Path) -> Result<Alignments> {
-        eprintln!("[fastga-rs] Starting alignment: {} vs {}",
-                 genome1.display(), genome2.display());
+        eprintln!(
+            "[fastga-rs] Starting alignment: {} vs {}",
+            genome1.display(),
+            genome2.display()
+        );
 
         // Validate input files
         if !genome1.exists() {
@@ -90,8 +93,16 @@ impl ProcessFastGA {
     ///
     /// # Returns
     /// The number of alignments written
-    pub fn align_to_file(&self, genome1: &Path, genome2: &Path, output_path: &Path) -> Result<usize> {
-        eprintln!("[fastga-rs] Aligning and writing to: {}", output_path.display());
+    pub fn align_to_file(
+        &self,
+        genome1: &Path,
+        genome2: &Path,
+        output_path: &Path,
+    ) -> Result<usize> {
+        eprintln!(
+            "[fastga-rs] Aligning and writing to: {}",
+            output_path.display()
+        );
 
         // Validate input files
         if !genome1.exists() {

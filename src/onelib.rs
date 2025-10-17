@@ -1,11 +1,11 @@
+use anyhow::{Context, Result};
+use onecode::{OneFile, OneSchema};
 /// ONElib bindings for reading/writing .1aln files
 ///
 /// This module provides safe Rust wrappers around the ONElib C library
 /// for working with .1aln alignment files, using the onecode crate.
 use std::path::Path;
 use std::sync::Mutex;
-use anyhow::{Result, Context};
-use onecode::{OneFile, OneSchema};
 
 use crate::alignment::Alignment;
 
@@ -45,8 +45,7 @@ D E 1 3 INT
 D Z 1 6 STRING
 "#;
 
-    OneSchema::from_text(schema_text)
-        .context("Failed to create .1aln schema")
+    OneSchema::from_text(schema_text).context("Failed to create .1aln schema")
 }
 
 /// Alignment record with numeric IDs (compatible with C FFI API)
@@ -77,8 +76,7 @@ pub struct AlnReader {
 impl AlnReader {
     /// Open a .1aln file for reading
     pub fn open<P: AsRef<Path>>(path: P) -> Result<Self> {
-        let path_str = path.as_ref().to_str()
-            .context("Invalid path")?;
+        let path_str = path.as_ref().to_str().context("Invalid path")?;
 
         // Create schema for .1aln files
         let schema = create_aln_schema()?;
@@ -92,7 +90,11 @@ impl AlnReader {
         // Count alignments by scanning for 'A' records
         let num_alignments = Self::count_alignments(&mut file)?;
 
-        Ok(AlnReader { file, num_alignments, contig_offsets })
+        Ok(AlnReader {
+            file,
+            num_alignments,
+            contig_offsets,
+        })
     }
 
     /// Count the total number of alignments in the file
@@ -149,8 +151,8 @@ impl AlnReader {
 
             // Read associated data lines until we hit 'T' (trace) or next 'A'
             let mut matches = 0u64;
-            let mut diffs_d_record = 0u64;  // D record (trace-related, not actual diffs)
-            let mut x_list_sum = 0u64;      // Sum of X records (actual edit distances)
+            let mut diffs_d_record = 0u64; // D record (trace-related, not actual diffs)
+            let mut x_list_sum = 0u64; // Sum of X records (actual edit distances)
             let mut is_reverse = false;
             let mut query_len = 0u64;
             let mut target_len = 0u64;
@@ -212,7 +214,11 @@ impl AlnReader {
             let target_span = b_end_contig - b_beg_contig;
 
             // Use X records if available, otherwise fall back to D record
-            let diffs = if has_x_records { x_list_sum } else { diffs_d_record };
+            let diffs = if has_x_records {
+                x_list_sum
+            } else {
+                diffs_d_record
+            };
 
             // Calculate divergence: (diffs - del) / query_span / 2.0
             // where del = target_span - query_span
@@ -228,13 +234,20 @@ impl AlnReader {
             // Calculate matches from identity and query_span
             // (since M record may not be present)
             let calculated_matches = (identity * query_span as f64) as u64;
-            let final_matches = if matches > 0 { matches } else { calculated_matches };
+            let final_matches = if matches > 0 {
+                matches
+            } else {
+                calculated_matches
+            };
 
             // Convert contig coordinates to scaffold coordinates (matching ALNtoPAF)
             // Query coordinates (always forward strand in contig space)
             let (a_beg, a_end) = if let Some(&(a_sbeg, _a_clen)) = self.contig_offsets.get(&a_id) {
                 // Apply offset: scaffold_coord = contig_sbeg + contig_coord
-                ((a_sbeg + a_beg_contig) as u64, (a_sbeg + a_end_contig) as u64)
+                (
+                    (a_sbeg + a_beg_contig) as u64,
+                    (a_sbeg + a_end_contig) as u64,
+                )
             } else {
                 // No contig info - use raw coordinates (shouldn't happen but be defensive)
                 (a_beg_contig as u64, a_end_contig as u64)
@@ -252,7 +265,10 @@ impl AlnReader {
                     ((b_off - b_end_contig) as u64, (b_off - b_beg_contig) as u64)
                 } else {
                     // Forward strand: use sbeg + coord
-                    ((b_sbeg + b_beg_contig) as u64, (b_sbeg + b_end_contig) as u64)
+                    (
+                        (b_sbeg + b_beg_contig) as u64,
+                        (b_sbeg + b_end_contig) as u64,
+                    )
                 }
             } else {
                 // No contig info - use raw coordinates (shouldn't happen with valid .1aln)
@@ -271,13 +287,13 @@ impl AlnReader {
                 target_len: target_len as usize,
                 target_start: b_beg as usize,
                 target_end: b_end as usize,
-                matches: final_matches as usize,  // Use calculated matches
+                matches: final_matches as usize, // Use calculated matches
                 block_len: block_len as usize,
-                mapping_quality: 60, // Default quality
+                mapping_quality: 60,  // Default quality
                 cigar: String::new(), // Don't extract CIGAR for filtering
                 tags: Vec::new(),
                 mismatches: diffs as usize, // Total diffs from X records (or D as fallback)
-                gap_opens: 0, // Not tracked in basic .1aln
+                gap_opens: 0,               // Not tracked in basic .1aln
                 gap_len: 0,
             };
 
@@ -302,7 +318,8 @@ impl AlnReader {
     /// C FFI implementation, but is ignored since onecode-rs automatically
     /// handles both query and target databases from the embedded GDB.
     pub fn get_seq_name(&mut self, seq_id: i64, _which_db: i32) -> Result<String> {
-        self.file.get_sequence_name(seq_id)
+        self.file
+            .get_sequence_name(seq_id)
             .ok_or_else(|| anyhow::anyhow!("Sequence ID {seq_id} not found"))
     }
 
@@ -323,10 +340,8 @@ impl AlnReader {
         };
 
         // Convert Alignment to AlnRecord
-        let query_id: i64 = alignment.query_name.parse()
-            .unwrap_or(-1); // Default to -1 if not numeric
-        let target_id: i64 = alignment.target_name.parse()
-            .unwrap_or(-1);
+        let query_id: i64 = alignment.query_name.parse().unwrap_or(-1); // Default to -1 if not numeric
+        let target_id: i64 = alignment.target_name.parse().unwrap_or(-1);
 
         let record = AlnRecord {
             query_id,
@@ -353,8 +368,7 @@ pub struct AlnWriter {
 impl AlnWriter {
     /// Create a new .1aln file for writing
     pub fn create<P: AsRef<Path>>(path: P, binary: bool) -> Result<Self> {
-        let path_str = path.as_ref().to_str()
-            .context("Invalid path")?;
+        let path_str = path.as_ref().to_str().context("Invalid path")?;
 
         // Create schema for .1aln files
         let schema = create_aln_schema()?;
@@ -378,10 +392,11 @@ impl AlnWriter {
         input_path: P2,
         binary: bool,
     ) -> Result<Self> {
-        let output_str = output_path.as_ref().to_str()
+        let output_str = output_path
+            .as_ref()
+            .to_str()
             .context("Invalid output path")?;
-        let input_str = input_path.as_ref().to_str()
-            .context("Invalid input path")?;
+        let input_str = input_path.as_ref().to_str().context("Invalid input path")?;
 
         // Open input file to use as template
         let schema = create_aln_schema()?;
@@ -475,9 +490,13 @@ impl AlnWriter {
     /// Write an alignment to the file
     pub fn write_alignment(&mut self, aln: &Alignment) -> Result<()> {
         // Parse sequence IDs from names (they should be numeric IDs for now)
-        let a_id: i64 = aln.query_name.parse()
+        let a_id: i64 = aln
+            .query_name
+            .parse()
             .with_context(|| format!("Query name '{}' is not a numeric ID", &aln.query_name))?;
-        let b_id: i64 = aln.target_name.parse()
+        let b_id: i64 = aln
+            .target_name
+            .parse()
             .with_context(|| format!("Target name '{}' is not a numeric ID", &aln.target_name))?;
 
         // Write 'A' line: alignment coordinates
