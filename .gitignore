@@ -1,6 +1,15 @@
 # Build outputs
 /target
 
+# FastGA compiled binaries (built by build.rs, should not be committed)
+deps/fastga/ALNtoPAF
+deps/fastga/FAtoGDB
+deps/fastga/FastGA
+deps/fastga/GIXmake
+deps/fastga/GIXrm
+deps/fastga/ONEview
+deps/fastga/PAFtoALN
+
 # FastGA intermediate files
 *.gix
 *.gdb
