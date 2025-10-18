@@ -35,6 +35,13 @@ jobs:
       - name: Build
         run: cargo build --release
 
+      - name: Verify FastGA binaries
+        run: |
+          echo "Searching for FastGA binaries..."
+          find target/release/build -name "FastGA" -o -name "GIXmake" -o -name "FAtoGDB" || true
+          echo "Contents of build directories:"
+          ls -la target/release/build/fastga-rs-*/out/ || true
+
       - name: Run tests
         run: cargo test --release
 
