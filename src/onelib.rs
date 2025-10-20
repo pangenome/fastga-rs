@@ -48,6 +48,8 @@ D Z 1 6 STRING
     OneSchema::from_text(schema_text).context("Failed to create .1aln schema")
 }
 
+const DEFAULT_TRACE_SPACING: i64 = 1;
+
 /// Alignment record with numeric IDs (compatible with C FFI API)
 ///
 /// This struct maintains API compatibility with the old C FFI implementation
@@ -373,8 +375,11 @@ impl AlnWriter {
         // Create schema for .1aln files
         let schema = create_aln_schema()?;
 
-        let file = OneFile::open_write_new(path_str, &schema, "aln", binary, 1)
+        let mut file = OneFile::open_write_new(path_str, &schema, "aln", binary, 1)
             .with_context(|| format!("Failed to create .1aln file: {path_str}"))?;
+
+        // ONEcode requires the global trace spacing ('t' line) before any GDB or alignment records.
+        Self::write_trace_spacing(&mut file, DEFAULT_TRACE_SPACING);
 
         Ok(AlnWriter { file })
     }
@@ -404,6 +409,9 @@ impl AlnWriter {
 
         // Create output file inheriting header from input
         let mut output_file = OneFile::open_write_from(output_str, &input_file, binary, 1)?;
+
+        // Preserve trace spacing from the template file (or fall back to default if absent)
+        Self::copy_trace_spacing(&mut input_file, &mut output_file);
 
         // Copy GDB data (the 'g' group with 'S' records) from input to output
         Self::copy_gdb_records(&mut input_file, &mut output_file)?;
@@ -485,6 +493,23 @@ impl AlnWriter {
         }
 
         Ok(())
+    }
+
+    fn write_trace_spacing(file: &mut OneFile, spacing: i64) {
+        file.set_int(0, spacing);
+        file.write_line('t', 0, None);
+    }
+
+    fn copy_trace_spacing(input: &mut OneFile, output: &mut OneFile) {
+        unsafe {
+            if onecode::ffi::oneGoto(input.as_ptr(), 't' as i8, 1) {
+                let spacing = input.int(0);
+                output.set_int(0, spacing);
+                output.write_line('t', 0, None);
+            } else {
+                Self::write_trace_spacing(output, DEFAULT_TRACE_SPACING);
+            }
+        }
     }
 
     /// Write an alignment to the file
@@ -602,6 +627,19 @@ mod tests {
 
         writer.write_alignment(&aln).unwrap();
         writer.finalize();
+
+        let schema = create_aln_schema().unwrap();
+        let mut file = OneFile::open_read(
+            temp_path.to_str().unwrap(),
+            Some(&schema),
+            Some("aln"),
+            1,
+        )
+        .unwrap();
+
+        let line_type = file.read_line();
+        assert_eq!(line_type, 't');
+        assert_eq!(file.int(0), DEFAULT_TRACE_SPACING);
     }
 
     #[test]
