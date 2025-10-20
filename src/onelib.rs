@@ -363,6 +363,7 @@ impl AlnReader {
 /// Writer for .1aln files
 pub struct AlnWriter {
     file: OneFile,
+    contig_offsets: std::collections::HashMap<i64, (i64, i64)>, // contig_id → (sbeg, clen) - same as AlnReader
 }
 
 impl AlnWriter {
@@ -376,7 +377,10 @@ impl AlnWriter {
         let file = OneFile::open_write_new(path_str, &schema, "aln", binary, 1)
             .with_context(|| format!("Failed to create .1aln file: {path_str}"))?;
 
-        Ok(AlnWriter { file })
+        Ok(AlnWriter {
+            file,
+            contig_offsets: std::collections::HashMap::new(),
+        })
     }
 
     /// Create a new .1aln file with GDB copied from an input .1aln file
@@ -402,13 +406,30 @@ impl AlnWriter {
         let schema = create_aln_schema()?;
         let mut input_file = OneFile::open_read(input_str, Some(&schema), Some("aln"), 1)?;
 
+        // Extract contig offset information from embedded GDB (for coordinate conversion)
+        let contig_offsets = input_file.get_all_contig_offsets();
+
         // Create output file inheriting header from input
         let mut output_file = OneFile::open_write_from(output_str, &input_file, binary, 1)?;
+
+        // Write trace spacing line (required by ALNtoPAF)
+        // Read from input if available, otherwise use default of 100
+        input_file.goto('t', 0).ok(); // Try to read trace spacing from input (ignore failure)
+        let trace_spacing = if input_file.line_type() == 't' {
+            input_file.int(0)
+        } else {
+            100 // Default trace spacing
+        };
+        output_file.set_int(0, trace_spacing);
+        output_file.write_line('t', 0, None);
 
         // Copy GDB data (the 'g' group with 'S' records) from input to output
         Self::copy_gdb_records(&mut input_file, &mut output_file)?;
 
-        Ok(AlnWriter { file: output_file })
+        Ok(AlnWriter {
+            file: output_file,
+            contig_offsets,
+        })
     }
 
     /// Copy GDB records from input to output
@@ -489,7 +510,7 @@ impl AlnWriter {
 
     /// Write an alignment to the file
     pub fn write_alignment(&mut self, aln: &Alignment) -> Result<()> {
-        // Parse sequence IDs from names (they should be numeric IDs for now)
+        // Parse sequence IDs from names (they should be numeric contig IDs)
         let a_id: i64 = aln
             .query_name
             .parse()
@@ -499,15 +520,53 @@ impl AlnWriter {
             .parse()
             .with_context(|| format!("Target name '{}' is not a numeric ID", &aln.target_name))?;
 
-        // Write 'A' line: alignment coordinates
+        // Convert scaffold coordinates back to contig-relative coordinates
+        // This reverses the transformation done by AlnReader
+
+        // Query coordinates (always forward strand)
+        let (a_beg_contig, a_end_contig) = if let Some(&(a_sbeg, _a_clen)) = self.contig_offsets.get(&a_id) {
+            // Convert: contig_coord = scaffold_coord - contig_sbeg
+            (
+                (aln.query_start as i64 - a_sbeg),
+                (aln.query_end as i64 - a_sbeg),
+            )
+        } else {
+            // No contig info - write raw coordinates (shouldn't happen with create_with_gdb())
+            (aln.query_start as i64, aln.query_end as i64)
+        };
+
+        // Target coordinates (may be reverse complement)
+        let (b_beg_contig, b_end_contig) = if let Some(&(b_sbeg, b_clen)) = self.contig_offsets.get(&b_id) {
+            if aln.strand == '-' {
+                // Reverse strand: reverse the transformation
+                // AlnReader did: scaffold_coord = (sbeg + clen) - contig_coord
+                // So: contig_coord = (sbeg + clen) - scaffold_coord
+                let b_off = b_sbeg + b_clen;
+                (
+                    b_off - aln.target_end as i64,
+                    b_off - aln.target_start as i64,
+                )
+            } else {
+                // Forward strand: contig_coord = scaffold_coord - sbeg
+                (
+                    aln.target_start as i64 - b_sbeg,
+                    aln.target_end as i64 - b_sbeg,
+                )
+            }
+        } else {
+            // No contig info - write raw coordinates (shouldn't happen with create_with_gdb())
+            (aln.target_start as i64, aln.target_end as i64)
+        };
+
+        // Write 'A' line: alignment coordinates (CONTIG coordinates, not scaffold!)
         // Schema: O A 6 3 INT 3 INT 3 INT 3 INT 3 INT 3 INT
         // Fields: aread, abpos, aepos, bread, bbpos, bepos
         self.file.set_int(0, a_id);
-        self.file.set_int(1, aln.query_start as i64);
-        self.file.set_int(2, aln.query_end as i64);
+        self.file.set_int(1, a_beg_contig);
+        self.file.set_int(2, a_end_contig);
         self.file.set_int(3, b_id);
-        self.file.set_int(4, aln.target_start as i64);
-        self.file.set_int(5, aln.target_end as i64);
+        self.file.set_int(4, b_beg_contig);
+        self.file.set_int(5, b_end_contig);
         self.file.write_line('A', 0, None);
 
         // Write 'R' line if reverse complement
