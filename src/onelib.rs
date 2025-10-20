@@ -524,39 +524,41 @@ impl AlnWriter {
         // This reverses the transformation done by AlnReader
 
         // Query coordinates (always forward strand)
-        let (a_beg_contig, a_end_contig) = if let Some(&(a_sbeg, _a_clen)) = self.contig_offsets.get(&a_id) {
-            // Convert: contig_coord = scaffold_coord - contig_sbeg
-            (
-                (aln.query_start as i64 - a_sbeg),
-                (aln.query_end as i64 - a_sbeg),
-            )
-        } else {
-            // No contig info - write raw coordinates (shouldn't happen with create_with_gdb())
-            (aln.query_start as i64, aln.query_end as i64)
-        };
-
-        // Target coordinates (may be reverse complement)
-        let (b_beg_contig, b_end_contig) = if let Some(&(b_sbeg, b_clen)) = self.contig_offsets.get(&b_id) {
-            if aln.strand == '-' {
-                // Reverse strand: reverse the transformation
-                // AlnReader did: scaffold_coord = (sbeg + clen) - contig_coord
-                // So: contig_coord = (sbeg + clen) - scaffold_coord
-                let b_off = b_sbeg + b_clen;
+        let (a_beg_contig, a_end_contig) =
+            if let Some(&(a_sbeg, _a_clen)) = self.contig_offsets.get(&a_id) {
+                // Convert: contig_coord = scaffold_coord - contig_sbeg
                 (
-                    b_off - aln.target_end as i64,
-                    b_off - aln.target_start as i64,
+                    (aln.query_start as i64 - a_sbeg),
+                    (aln.query_end as i64 - a_sbeg),
                 )
             } else {
-                // Forward strand: contig_coord = scaffold_coord - sbeg
-                (
-                    aln.target_start as i64 - b_sbeg,
-                    aln.target_end as i64 - b_sbeg,
-                )
-            }
-        } else {
-            // No contig info - write raw coordinates (shouldn't happen with create_with_gdb())
-            (aln.target_start as i64, aln.target_end as i64)
-        };
+                // No contig info - write raw coordinates (shouldn't happen with create_with_gdb())
+                (aln.query_start as i64, aln.query_end as i64)
+            };
+
+        // Target coordinates (may be reverse complement)
+        let (b_beg_contig, b_end_contig) =
+            if let Some(&(b_sbeg, b_clen)) = self.contig_offsets.get(&b_id) {
+                if aln.strand == '-' {
+                    // Reverse strand: reverse the transformation
+                    // AlnReader did: scaffold_coord = (sbeg + clen) - contig_coord
+                    // So: contig_coord = (sbeg + clen) - scaffold_coord
+                    let b_off = b_sbeg + b_clen;
+                    (
+                        b_off - aln.target_end as i64,
+                        b_off - aln.target_start as i64,
+                    )
+                } else {
+                    // Forward strand: contig_coord = scaffold_coord - sbeg
+                    (
+                        aln.target_start as i64 - b_sbeg,
+                        aln.target_end as i64 - b_sbeg,
+                    )
+                }
+            } else {
+                // No contig info - write raw coordinates (shouldn't happen with create_with_gdb())
+                (aln.target_start as i64, aln.target_end as i64)
+            };
 
         // Write 'A' line: alignment coordinates (CONTIG coordinates, not scaffold!)
         // Schema: O A 6 3 INT 3 INT 3 INT 3 INT 3 INT 3 INT
