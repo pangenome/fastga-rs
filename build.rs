@@ -100,7 +100,7 @@ fn main() {
     use std::process::Command;
 
     let utilities = [
-        "FastGA", "FAtoGDB", "GIXmake", "GIXrm", "ALNtoPAF", "PAFtoALN",
+        "FastGA", "FAtoGDB", "GIXmake", "GIXrm", "ALNtoPAF", "PAFtoALN", "ONEview",
     ];
 
     println!("cargo:warning=Building FastGA utilities...");
