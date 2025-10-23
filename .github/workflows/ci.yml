@@ -8,6 +8,7 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
+  TMPDIR: ${{ runner.temp }}  # Use GitHub's temp directory to avoid disk space issues
 
 jobs:
   test:
