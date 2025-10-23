@@ -13,8 +13,6 @@ jobs:
   test:
     name: Test Suite
     runs-on: ubuntu-latest
-    env:
-      TMPDIR: ${{ runner.temp }}  # Use GitHub's temp directory to avoid disk space issues
     steps:
       - uses: actions/checkout@v3
         with:
@@ -45,7 +43,11 @@ jobs:
           ls -la target/release/build/fastga-rs-*/out/ || true
 
       - name: Run tests
-        run: cargo test --release
+        run: |
+          # Set TMPDIR to GitHub's temp directory to avoid disk space issues
+          export TMPDIR="${{ runner.temp }}"
+          echo "TMPDIR for tests: $TMPDIR"
+          cargo test --release
 
       - name: Run clippy
         run: cargo clippy -- -D warnings
@@ -56,8 +58,6 @@ jobs:
   build:
     name: Build Check
     runs-on: ubuntu-latest
-    env:
-      TMPDIR: ${{ runner.temp }}  # Use GitHub's temp directory to avoid disk space issues
     strategy:
       matrix:
         rust: [stable, beta, nightly]
