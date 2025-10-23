@@ -10,9 +10,10 @@ use std::path::PathBuf;
 ///
 /// Search order:
 /// 1. Same directory as current executable (cargo install)
-/// 2. OUT_DIR from build.rs (development only)
-/// 3. Cargo build directories (development)
-/// 4. System PATH
+/// 2. $CARGO_HOME/lib/{parent_package}/ (for dependent packages after cargo install)
+/// 3. OUT_DIR from build.rs (development only)
+/// 4. Cargo build directories (development)
+/// 5. System PATH
 pub fn find_binary(name: &str) -> Result<PathBuf> {
     // 1. Try same directory as the current executable (for cargo install)
     if let Ok(exe_path) = std::env::current_exe() {
@@ -24,7 +25,29 @@ pub fn find_binary(name: &str) -> Result<PathBuf> {
         }
     }
 
-    // 2. Try OUT_DIR (compile-time env var, only works during build)
+    // 2. Try $CARGO_HOME/lib/{parent_package}/ for packages that depend on fastga-rs
+    // This allows dependent packages to install FastGA binaries to a known location
+    let cargo_home = std::env::var("CARGO_HOME")
+        .ok()
+        .map(PathBuf::from)
+        .or_else(|| {
+            std::env::var("HOME")
+                .ok()
+                .map(|h| PathBuf::from(h).join(".cargo"))
+        });
+
+    if let Some(cargo_home) = cargo_home {
+        let lib_dir = cargo_home.join("lib");
+        // Check common package names that might use fastga-rs
+        for package in &["sweepga", "fastga-rs", "fastga"] {
+            let binary = lib_dir.join(package).join(name);
+            if binary.exists() {
+                return Ok(binary);
+            }
+        }
+    }
+
+    // 3. Try OUT_DIR (compile-time env var, only works during build)
     if let Ok(out_dir) = std::env::var("OUT_DIR") {
         let path = PathBuf::from(out_dir).join(name);
         if path.exists() {
@@ -32,7 +55,7 @@ pub fn find_binary(name: &str) -> Result<PathBuf> {
         }
     }
 
-    // 3. Try current exe's build directory (development in target/)
+    // 4. Try current exe's build directory (development in target/)
     if let Ok(exe_path) = std::env::current_exe() {
         if let Some(exe_dir) = exe_path.parent() {
             let build_dir = exe_dir.join("build");
@@ -53,7 +76,7 @@ pub fn find_binary(name: &str) -> Result<PathBuf> {
         }
     }
 
-    // 4. Try target directories (running from project root)
+    // 5. Try target directories (running from project root)
     for profile in &["debug", "release"] {
         let build_dir = PathBuf::from(format!("target/{profile}/build"));
         if let Ok(entries) = std::fs::read_dir(&build_dir) {
@@ -72,7 +95,7 @@ pub fn find_binary(name: &str) -> Result<PathBuf> {
         }
     }
 
-    // 5. Fall back to PATH (system-installed FastGA)
+    // 6. Fall back to PATH (system-installed FastGA)
     if let Ok(path) = which::which(name) {
         return Ok(path);
     }
@@ -98,7 +121,28 @@ pub fn get_binary_dir() -> Result<PathBuf> {
         }
     }
 
-    // 2. Try OUT_DIR
+    // 2. Try $CARGO_HOME/lib/{parent_package}/
+    let cargo_home = std::env::var("CARGO_HOME")
+        .ok()
+        .map(PathBuf::from)
+        .or_else(|| {
+            std::env::var("HOME")
+                .ok()
+                .map(|h| PathBuf::from(h).join(".cargo"))
+        });
+
+    if let Some(cargo_home) = cargo_home {
+        let lib_dir = cargo_home.join("lib");
+        for package in &["sweepga", "fastga-rs", "fastga"] {
+            let package_lib = lib_dir.join(package);
+            let test_binary = package_lib.join("FastGA");
+            if test_binary.exists() {
+                return Ok(package_lib);
+            }
+        }
+    }
+
+    // 3. Try OUT_DIR
     if let Ok(out_dir) = std::env::var("OUT_DIR") {
         let path = PathBuf::from(&out_dir);
         let test_binary = path.join("FastGA");
@@ -107,7 +151,7 @@ pub fn get_binary_dir() -> Result<PathBuf> {
         }
     }
 
-    // 3. Try current exe's build directory
+    // 4. Try current exe's build directory
     if let Ok(exe_path) = std::env::current_exe() {
         if let Some(exe_dir) = exe_path.parent() {
             let build_dir = exe_dir.join("build");
@@ -129,7 +173,7 @@ pub fn get_binary_dir() -> Result<PathBuf> {
         }
     }
 
-    // 4. Try target directories
+    // 5. Try target directories
     for profile in &["debug", "release"] {
         let build_dir = PathBuf::from(format!("target/{profile}/build"));
         if let Ok(entries) = std::fs::read_dir(&build_dir) {
