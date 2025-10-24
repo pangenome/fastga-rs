@@ -139,10 +139,9 @@ pub fn run_fastga_simple(
     cmd.arg(query_path);
     cmd.arg(target_path);
 
-    // Set PATH to include binary directory
-    let current_path = std::env::var("PATH").unwrap_or_default();
-    let new_path = format!("{}:{}", bin_dir.display(), current_path);
-    cmd.env("PATH", new_path);
+    // Set ISOLATED PATH so FastGA can ONLY find its own utilities
+    // This prevents FastGA from accidentally using system binaries
+    cmd.env("PATH", bin_dir);
 
     eprintln!("[FastGA] Running command: {cmd:?}");
 
@@ -192,9 +191,8 @@ where
     cmd.arg(query_path);
     cmd.arg(target_path);
 
-    let current_path = std::env::var("PATH").unwrap_or_default();
-    let new_path = format!("{}:{}", bin_dir.display(), current_path);
-    cmd.env("PATH", new_path);
+    // Set ISOLATED PATH so FastGA can ONLY find its own utilities
+    cmd.env("PATH", bin_dir);
 
     let mut child = cmd
         .stdout(Stdio::piped())

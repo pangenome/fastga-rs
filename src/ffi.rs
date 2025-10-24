@@ -96,15 +96,15 @@ pub fn run_fastga_alignment(
     // Convert to raw pointers for C
     let c_args: Vec<*const c_char> = args.iter().map(|s| s.as_ptr()).collect();
 
-    // Set PATH to include our binary directory so FastGA can find FAtoGDB, GIXmake, etc.
+    // Set ISOLATED PATH so FastGA can ONLY find its own utilities (FAtoGDB, GIXmake, etc.)
+    // This prevents FastGA from accidentally using system binaries
     let bin_dir = find_fastga_bin_dir();
 
-    // Save original PATH
+    // Save original PATH for restoration
     let original_path = std::env::var("PATH").unwrap_or_default();
 
-    // Add our binary directory to PATH
-    let new_path = format!("{bin_dir}:{original_path}");
-    std::env::set_var("PATH", &new_path);
+    // Set PATH to ONLY our binary directory (isolated)
+    std::env::set_var("PATH", &bin_dir);
 
     // Create a pipe to capture stdout
     use std::io::Read;

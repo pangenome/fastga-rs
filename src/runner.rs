@@ -38,17 +38,10 @@ impl Orchestrator {
         // Find FastGA binary
         let fastga = find_fastga_binary()?;
 
-        // Get binary directory and set up PATH so FastGA can find its helper utilities
+        // Get binary directory and set up ISOLATED PATH so FastGA can ONLY find its own utilities
+        // This prevents FastGA from accidentally using system binaries
         let binary_dir = crate::binary_finder::get_binary_dir()?;
-        let new_path = if let Some(old_path) = std::env::var_os("PATH") {
-            let mut paths = std::env::split_paths(&old_path).collect::<Vec<_>>();
-            // Prepend binary_dir to ensure it's found first
-            paths.insert(0, binary_dir.clone());
-            std::env::join_paths(paths).unwrap()
-        } else {
-            // No existing PATH, just use binary_dir
-            std::ffi::OsString::from(binary_dir.as_os_str())
-        };
+        let new_path = std::ffi::OsString::from(binary_dir.as_os_str());
 
         // FIX 1: Create unique temp directory for FastGA's internal files (GDB, indexes, etc.)
         // This prevents race conditions when multiple FastGA instances run in parallel
