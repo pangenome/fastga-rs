@@ -68,7 +68,7 @@ pub struct AlnRecord {
 
 /// Reader for .1aln files
 pub struct AlnReader {
-    file: OneFile,
+    pub file: OneFile,
     num_alignments: i64,
     contig_offsets: std::collections::HashMap<i64, (i64, i64)>, // contig_id → (sbeg, clen)
 }
@@ -500,6 +500,105 @@ impl AlnWriter {
                     }
                     _ => {
                         // Skip unknown line types
+                    }
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Copy an alignment record directly from input to output, preserving all data including trace points
+    ///
+    /// This method copies the raw alignment record from the input file positioned at an 'A' record,
+    /// including all associated data lines ('R', 'L', 'M', 'D', 'Q', 'T', 'X', etc.).
+    /// This is the preferred method for filtering, as it preserves trace data that ALNtoPAF needs.
+    ///
+    /// # Safety
+    /// The input_file must be positioned at an 'A' record when this method is called.
+    pub fn copy_alignment_record_from_file(&mut self, input_file: &mut OneFile) -> Result<()> {
+        unsafe {
+            // Verify we're at an 'A' record
+            if input_file.line_type() != 'A' {
+                anyhow::bail!("Input file not positioned at 'A' record");
+            }
+
+            // Copy 'A' record (alignment coordinates)
+            for i in 0..6 {
+                self.file.set_int(i, input_file.int(i));
+            }
+            self.file.write_line('A', 0, None);
+
+            // Copy all associated records until we hit 'T' (trace) or next 'A'
+            loop {
+                let next_type = input_file.read_line();
+
+                if next_type == '\0' {
+                    break; // EOF
+                }
+
+                match next_type {
+                    'T' => {
+                        // Copy T record (trace point positions - INT_LIST)
+                        if let Some(t_values) = input_file.int_list() {
+                            let len = t_values.len() as i64;
+                            let ptr = t_values.as_ptr() as *mut std::ffi::c_void;
+                            self.file.write_line('T', len, Some(ptr));
+                        } else {
+                            // Empty T record
+                            self.file.write_line('T', 0, None);
+                        }
+
+                        // Next should be X record (trace point diffs)
+                        let x_type = input_file.read_line();
+                        if x_type == 'X' {
+                            // Copy X record (INT_LIST of differences at each trace point)
+                            if let Some(x_values) = input_file.int_list() {
+                                let len = x_values.len() as i64;
+                                let ptr = x_values.as_ptr() as *mut std::ffi::c_void;
+                                self.file.write_line('X', len, Some(ptr));
+                            } else {
+                                // Empty X record
+                                self.file.write_line('X', 0, None);
+                            }
+                        }
+                        break; // Done with this alignment
+                    }
+                    'R' => {
+                        // Reverse complement flag
+                        self.file.write_line('R', 0, None);
+                    }
+                    'L' => {
+                        // Sequence lengths
+                        self.file.set_int(0, input_file.int(0));
+                        self.file.set_int(1, input_file.int(1));
+                        self.file.write_line('L', 0, None);
+                    }
+                    'M' => {
+                        // Matches
+                        self.file.set_int(0, input_file.int(0));
+                        self.file.write_line('M', 0, None);
+                    }
+                    'D' => {
+                        // Differences
+                        self.file.set_int(0, input_file.int(0));
+                        self.file.write_line('D', 0, None);
+                    }
+                    'Q' => {
+                        // Quality
+                        self.file.set_int(0, input_file.int(0));
+                        self.file.write_line('Q', 0, None);
+                    }
+                    'A' => {
+                        // Hit next alignment without seeing 'T' - this alignment had no trace data
+                        // Write empty trace records
+                        self.file.write_line('T', 0, None);
+                        self.file.write_line('X', 0, None);
+                        break;
+                    }
+                    _ => {
+                        // Skip unknown records
+                        continue;
                     }
                 }
             }
