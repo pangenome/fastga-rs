@@ -122,7 +122,8 @@ impl FastGAOrchestrator {
 
         let mut cmd = std::process::Command::new(&fastga_bin);
         cmd.arg(format!("-1:{}", temp_aln_rel.to_string_lossy()))
-            .arg(format!("-T{}", self.num_threads));
+            .arg(format!("-T{}", self.num_threads))
+            .arg(format!("-f{}", self.kmer_freq));  // Pass frequency threshold to FastGA
 
         // Only add -l if it's > 0 (FastGA's default is 0 anyway)
         if self.min_length > 0 {
@@ -306,7 +307,8 @@ impl FastGAOrchestrator {
 
         let mut cmd = std::process::Command::new(&fastga_bin);
         cmd.arg(format!("-1:{}", temp_aln_rel.to_string_lossy()))
-            .arg(format!("-T{}", self.num_threads));
+            .arg(format!("-T{}", self.num_threads))
+            .arg(format!("-f{}", self.kmer_freq));  // Pass frequency threshold to FastGA
 
         // Only add -l if it's > 0 (FastGA's default is 0 anyway)
         if self.min_length > 0 {
