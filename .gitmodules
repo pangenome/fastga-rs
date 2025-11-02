@@ -1,0 +1,4 @@
+[submodule "deps/fastga"]
+	path = deps/fastga
+	url = git@github.com:ekg/FASTGA.git
+	branch = pangenome-frequency-fix
