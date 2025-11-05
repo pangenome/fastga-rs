@@ -77,18 +77,26 @@ impl AlnReader {
     /// Open a .1aln file for reading
     pub fn open<P: AsRef<Path>>(path: P) -> Result<Self> {
         let path_str = path.as_ref().to_str().context("Invalid path")?;
+        eprintln!("[AlnReader::open] Opening {}", path_str);
 
         // Create schema for .1aln files
         let schema = create_aln_schema()?;
+        eprintln!("[AlnReader::open] Schema created");
 
         let mut file = OneFile::open_read(path_str, Some(&schema), Some("aln"), 1)
             .with_context(|| format!("Failed to open .1aln file: {path_str}"))?;
+        eprintln!("[AlnReader::open] File opened");
 
         // Extract contig offset information from embedded GDB (for coordinate conversion)
+        eprintln!("[AlnReader::open] Getting contig offsets...");
         let contig_offsets = file.get_all_contig_offsets();
+        eprintln!("[AlnReader::open] Got {} contig offsets", contig_offsets.len());
 
-        // Count alignments by scanning for 'A' records
-        let num_alignments = Self::count_alignments(&mut file)?;
+        // DON'T use goto() - just let read_alignment() scan from current position
+        // The file pointer is already at the beginning of alignments after get_all_contig_offsets()
+
+        // Don't pre-count alignments (would require another scan)
+        let num_alignments = -1; // Unknown until we scan
 
         Ok(AlnReader {
             file,
@@ -111,8 +119,9 @@ impl AlnReader {
             }
         }
 
-        // Reset to beginning
-        file.goto('A', 0)?;
+        // Reset to beginning of alignments
+        // Use object number 1 (first alignment) instead of 0 (before first)
+        file.goto('A', 1)?;
 
         Ok(count)
     }
@@ -125,20 +134,19 @@ impl AlnReader {
     /// Read next alignment from the file
     /// Returns None when EOF is reached
     pub fn read_alignment(&mut self) -> Result<Option<Alignment>> {
-        // Skip to next 'A' record (alignment)
+        // Read lines until we find an 'A' record (alignment)
         loop {
-            let line_type = self.file.line_type();
+            let line_type = self.file.read_line();
 
-            // If we're not at an 'A' record, read next line
-            if line_type != 'A' {
-                let next = self.file.read_line();
-                if next == '\0' {
-                    return Ok(None); // EOF
-                }
-                continue;
+            if line_type == '\0' {
+                return Ok(None); // EOF
             }
 
-            // We're at an 'A' record
+            if line_type != 'A' {
+                continue; // Skip non-alignment records
+            }
+
+            // We're at an 'A' record - process it
             // Schema: O A 6 3 INT 3 INT 3 INT 3 INT 3 INT 3 INT
             // Fields: aread, abpos, aepos, bread, bbpos, bepos
             // NOTE: These are CONTIG coordinates, we need to convert to scaffold coordinates
@@ -317,6 +325,12 @@ impl AlnReader {
     /// Note: The `which_db` parameter is kept for API compatibility with the old
     /// C FFI implementation, but is ignored since onecode-rs automatically
     /// handles both query and target databases from the embedded GDB.
+    /// Get a single sequence name by ID
+    ///
+    /// **WARNING**: This method uses `goto()` internally to navigate to GDB groups,
+    /// which can corrupt the file position during alignment iteration.
+    /// For reading multiple alignments, use `get_all_seq_names()` BEFORE your
+    /// reading loop to avoid this issue.
     pub fn get_seq_name(&mut self, seq_id: i64, _which_db: i32) -> Result<String> {
         self.file
             .get_sequence_name(seq_id)
@@ -324,6 +338,10 @@ impl AlnReader {
     }
 
     /// Get all sequence names at once (efficient for bulk lookups)
+    ///
+    /// **RECOMMENDED**: Use this method before reading alignments in a loop,
+    /// then look up names from the returned HashMap. This avoids file position
+    /// corruption that occurs when calling `get_seq_name()` during iteration.
     pub fn get_all_seq_names(&mut self) -> std::collections::HashMap<i64, String> {
         self.file.get_all_sequence_names()
     }

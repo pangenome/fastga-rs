@@ -17,7 +17,7 @@ libc = "0.2"
 num_cpus = "1.16"
 nix = { version = "0.27", features = ["fs", "process"] }
 which = "6.0"
-onecode = { git = "https://github.com/pangenome/onecode-rs.git", rev = "3ac229e39d72b0ac724c688e91fb2525e08922f7" }
+onecode = { git = "https://github.com/pangenome/onecode-rs.git", rev = "02d30676bdb0d382d325778f25fce1d5c1f45897" }
 
 [build-dependencies]
 cc = "1.0"
