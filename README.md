@@ -12,6 +12,15 @@ Rust wrapper for [FastGA](https://github.com/thegenemyers/FASTGA), a fast genome
 
 ## Installation
 
+Add to your `Cargo.toml`:
+
+```toml
+[dependencies]
+fastga-rs = "0.1.0"
+```
+
+Or use the latest development version:
+
 ```toml
 [dependencies]
 fastga-rs = { git = "https://github.com/pangenome/fastga-rs.git" }
