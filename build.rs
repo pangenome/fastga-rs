@@ -131,6 +131,10 @@ fn main() {
                 perms.set_mode(0o755);
                 std::fs::set_permissions(&dst, perms).unwrap();
             }
+
+            // Remove from source directory to avoid cargo publish verification errors
+            // (cargo doesn't allow build scripts to modify source directory)
+            let _ = std::fs::remove_file(&src);
         }
     }
 
