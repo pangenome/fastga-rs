@@ -8,6 +8,13 @@ description = "Rust bindings for FastGA genome aligner with extended CIGAR suppo
 repository = "https://github.com/pangenome/fastga-rs"
 keywords = ["genomics", "alignment", "bioinformatics", "fastga"]
 categories = ["science", "api-bindings"]
+exclude = [
+    "target/",
+    "data/",
+    "*.md",
+    "!README.md",
+    "!LICENSE",
+]
 
 [dependencies]
 thiserror = "1.0"
