@@ -90,7 +90,10 @@ impl AlnReader {
         // Extract contig offset information from embedded GDB (for coordinate conversion)
         eprintln!("[AlnReader::open] Getting contig offsets...");
         let contig_offsets = file.get_all_contig_offsets();
-        eprintln!("[AlnReader::open] Got {} contig offsets", contig_offsets.len());
+        eprintln!(
+            "[AlnReader::open] Got {} contig offsets",
+            contig_offsets.len()
+        );
 
         // DON'T use goto() - just let read_alignment() scan from current position
         // The file pointer is already at the beginning of alignments after get_all_contig_offsets()
@@ -104,7 +107,6 @@ impl AlnReader {
             contig_offsets,
         })
     }
-
 
     /// Get total number of alignments in the file
     pub fn num_alignments(&self) -> i64 {
@@ -836,11 +838,11 @@ mod gdb_bug_test {
     #[test]
     fn test_create_with_gdb_roundtrip() -> Result<()> {
         let temp_dir = TempDir::new()?;
-        
+
         // Create a simple .1aln file with 4 alignments
         let input_path = temp_dir.path().join("input.1aln");
         let mut writer = AlnWriter::create(&input_path, true)?;
-        
+
         let aln = Alignment {
             query_name: "0".to_string(),
             query_len: 1000,
@@ -860,18 +862,18 @@ mod gdb_bug_test {
             gap_len: 0,
             gap_opens: 0,
         };
-        
+
         for _ in 0..4 {
             writer.write_alignment(&aln)?;
         }
         writer.finalize();
-        
+
         eprintln!("Wrote 4 alignments to input.1aln");
-        
+
         // Now filter using create_with_gdb
         let output_path = temp_dir.path().join("output.1aln");
         let mut filtered_writer = AlnWriter::create_with_gdb(&output_path, &input_path, true)?;
-        
+
         // Read and write all alignments
         let mut reader = AlnReader::open(&input_path)?;
         let mut count = 0;
@@ -881,7 +883,7 @@ mod gdb_bug_test {
         }
         eprintln!("Wrote {count} alignments with create_with_gdb");
         filtered_writer.finalize();
-        
+
         // Try to read back
         let mut reader2 = AlnReader::open(&output_path)?;
         let mut read_count = 0;
@@ -889,9 +891,12 @@ mod gdb_bug_test {
             read_count += 1;
         }
         eprintln!("Read back {read_count} alignments");
-        
-        assert_eq!(count, read_count, "Wrote {count} alignments but read back {read_count}!");
-        
+
+        assert_eq!(
+            count, read_count,
+            "Wrote {count} alignments but read back {read_count}!"
+        );
+
         Ok(())
     }
 
@@ -929,18 +934,18 @@ mod gdb_bug_test {
         let input_alns: Vec<_> = reader.read_all()?;
         let input_count = input_alns.len();
         eprintln!("Read {input_count} alignments from FastGA output (with embedded GDB)");
-        
+
         // Now filter using create_with_gdb (copying the embedded GDB)
         let output_path = temp_dir.path().join("output.1aln");
         let mut filtered_writer = AlnWriter::create_with_gdb(&output_path, &input_path, true)?;
-        
+
         // Write all alignments
         for aln in &input_alns {
             filtered_writer.write_alignment(aln)?;
         }
         eprintln!("Wrote {input_count} alignments with create_with_gdb");
         filtered_writer.finalize();
-        
+
         // Try to read back
         let mut reader2 = AlnReader::open(&output_path)?;
         let output_alns: Vec<_> = reader2.read_all()?;
@@ -949,7 +954,7 @@ mod gdb_bug_test {
 
         assert_eq!(input_count, output_count,
                    "BUG REPRODUCED! Wrote {input_count} alignments but read back {output_count} when input had embedded GDB!");
-        
+
         Ok(())
     }
 }

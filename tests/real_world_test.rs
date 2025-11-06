@@ -167,9 +167,7 @@ fn test_chrV_identity_scoring() -> Result<()> {
             "Test alignment: {} -> {}",
             test_alignment.query_name, test_alignment.target_name
         );
-        println!(
-            "CIGAR operators: {match_count} matches (=), {mismatch_count} mismatches (X)"
-        );
+        println!("CIGAR operators: {match_count} matches (=), {mismatch_count} mismatches (X)");
 
         // Parse CIGAR to calculate expected identity
         let mut total_bases = 0;
@@ -233,9 +231,7 @@ fn test_plane_sweep_scoring_properties() -> Result<()> {
 
         println!("\n=== Plane Sweep Score Properties ===");
         println!("Perfect alignment (100% identity, {perfect_length} bp):");
-        println!(
-            "  Score = 1.0 × ln({perfect_length}) = {perfect_score:.2}"
-        );
+        println!("  Score = 1.0 × ln({perfect_length}) = {perfect_score:.2}");
 
         // Now test with sequences that have mismatches
         let seq2_path = temp_dir.path().join("variant.fasta");

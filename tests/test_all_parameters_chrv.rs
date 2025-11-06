@@ -37,7 +37,10 @@ fn test_all_parameters_with_chrv() -> Result<()> {
     let aligner = FastGA::new(config)?;
     let result = aligner.align_files(&chrv_path, &chrv_path)?;
     eprintln!("✓ Basic params: {} alignments found", result.len());
-    assert!(!result.is_empty(), "Should find alignments with basic params");
+    assert!(
+        !result.is_empty(),
+        "Should find alignments with basic params"
+    );
 
     // Test 2: Verbose mode with log file
     eprintln!("\n--- Test 2: Verbose Mode + Log File ---");

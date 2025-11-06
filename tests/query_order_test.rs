@@ -29,9 +29,7 @@ fn test_fastga_processes_queries_sequentially() -> Result<()> {
 
     std::fs::write(
         &queries_fasta,
-        format!(
-            ">query_A\n{seq_a}\n>query_B\n{seq_b}\n>query_C\n{seq_c}\n"
-        ),
+        format!(">query_A\n{seq_a}\n>query_B\n{seq_b}\n>query_C\n{seq_c}\n"),
     )?;
 
     // Target sequences with exact matches plus some variants
