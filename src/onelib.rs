@@ -479,9 +479,16 @@ impl AlnWriter {
                     continue;
                 }
 
-                // Stop when we hit next 'g' or reach alignments
-                if line_type == 'g' || line_type == 'A' || line_type == 'a' {
+                // Continue copying additional 'g' groups (FastGA has one per sequence)
+                // Only stop when we reach alignment records
+                if line_type == 'A' || line_type == 'a' {
                     break;
+                }
+
+                // Handle 'g' record (additional GDB groups)
+                if line_type == 'g' {
+                    output.write_line('g', 0, None);
+                    continue;
                 }
 
                 // Copy this record to output
