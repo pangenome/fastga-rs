@@ -918,29 +918,32 @@ mod gdb_bug_test {
     #[test]
     fn test_create_with_gdb_from_gdb_input() -> Result<()> {
         let temp_dir = TempDir::new()?;
-        
-        // Create input.1aln WITH embedded GDB (like FastGA does)
-        let input_path = temp_dir.path().join("input.1aln");
-        
-        // Use a simple FASTA to generate a .1aln with FastGA
+
+        // Use a larger FASTA to ensure alignments are generated
         let fasta_path = temp_dir.path().join("test.fa");
-        std::fs::write(&fasta_path, ">seq1\nACGTACGT\n>seq2\nTGCATGCA\n")?;
-        
+        std::fs::write(&fasta_path, ">seq1\nACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGT\n>seq2\nACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGT\n")?;
+
         // Skip if FastGA not available
-        if std::process::Command::new("FastGA")
+        let output = std::process::Command::new("FastGA")
             .arg("-1:test.1aln")
             .arg("test.fa")
             .arg("test.fa")
             .current_dir(temp_dir.path())
-            .output()
-            .is_err()
-        {
+            .output();
+
+        if output.is_err() {
             eprintln!("Skipping test - FastGA not available");
             return Ok(());
         }
-        
+
         let input_path = temp_dir.path().join("test.1aln");
-        
+
+        // Skip if file doesn't exist or is empty
+        if !input_path.exists() || std::fs::metadata(&input_path)?.len() == 0 {
+            eprintln!("Skipping test - FastGA produced no output");
+            return Ok(());
+        }
+
         // Read input (should have 2 self-alignments)
         let mut reader = AlnReader::open(&input_path)?;
         let input_alns: Vec<_> = reader.read_all()?;
