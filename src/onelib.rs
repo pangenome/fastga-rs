@@ -523,6 +523,9 @@ impl AlnWriter {
             }
         }
 
+        // After copying GDB records, the file is ready for alignment records.
+        // FastGA doesn't write 'a' group markers - alignments appear directly after GDB.
+
         Ok(())
     }
 
@@ -835,5 +838,129 @@ mod tests {
         assert_eq!(read_aln.target_end, original_aln.target_end);
         assert_eq!(read_aln.matches, original_aln.matches);
         assert_eq!(read_aln.mapping_quality, original_aln.mapping_quality);
+    }
+}
+
+#[cfg(test)]
+mod gdb_bug_test {
+    use super::*;
+    use tempfile::TempDir;
+
+    #[test]
+    fn test_create_with_gdb_roundtrip() -> Result<()> {
+        let temp_dir = TempDir::new()?;
+        
+        // Create a simple .1aln file with 4 alignments
+        let input_path = temp_dir.path().join("input.1aln");
+        let mut writer = AlnWriter::create(&input_path, true)?;
+        
+        let aln = Alignment {
+            query_name: "0".to_string(),
+            query_len: 1000,
+            query_start: 0,
+            query_end: 100,
+            strand: '+',
+            target_name: "1".to_string(),
+            target_len: 1000,
+            target_start: 0,
+            target_end: 100,
+            matches: 95,
+            block_len: 200,
+            mapping_quality: 60,
+            cigar: String::new(),
+            tags: Vec::new(),
+            mismatches: 5,
+            gap_len: 0,
+            gap_opens: 0,
+        };
+        
+        for _ in 0..4 {
+            writer.write_alignment(&aln)?;
+        }
+        writer.finalize();
+        
+        eprintln!("Wrote 4 alignments to input.1aln");
+        
+        // Now filter using create_with_gdb
+        let output_path = temp_dir.path().join("output.1aln");
+        let mut filtered_writer = AlnWriter::create_with_gdb(&output_path, &input_path, true)?;
+        
+        // Read and write all alignments
+        let mut reader = AlnReader::open(&input_path)?;
+        let mut count = 0;
+        while let Some(aln) = reader.read_alignment()? {
+            filtered_writer.write_alignment(&aln)?;
+            count += 1;
+        }
+        eprintln!("Wrote {} alignments with create_with_gdb", count);
+        filtered_writer.finalize();
+        
+        // Try to read back
+        let mut reader2 = AlnReader::open(&output_path)?;
+        let mut read_count = 0;
+        while let Some(_aln) = reader2.read_alignment()? {
+            read_count += 1;
+        }
+        eprintln!("Read back {} alignments", read_count);
+        
+        assert_eq!(count, read_count, "Wrote {} alignments but read back {}!", count, read_count);
+        
+        Ok(())
+    }
+
+    #[test]
+    fn test_create_with_gdb_from_gdb_input() -> Result<()> {
+        let temp_dir = TempDir::new()?;
+        
+        // Create input.1aln WITH embedded GDB (like FastGA does)
+        let input_path = temp_dir.path().join("input.1aln");
+        
+        // Use a simple FASTA to generate a .1aln with FastGA
+        let fasta_path = temp_dir.path().join("test.fa");
+        std::fs::write(&fasta_path, ">seq1\nACGTACGT\n>seq2\nTGCATGCA\n")?;
+        
+        // Skip if FastGA not available
+        if std::process::Command::new("FastGA")
+            .arg("-1:test.1aln")
+            .arg("test.fa")
+            .arg("test.fa")
+            .current_dir(temp_dir.path())
+            .output()
+            .is_err()
+        {
+            eprintln!("Skipping test - FastGA not available");
+            return Ok(());
+        }
+        
+        let input_path = temp_dir.path().join("test.1aln");
+        
+        // Read input (should have 2 self-alignments)
+        let mut reader = AlnReader::open(&input_path)?;
+        let input_alns: Vec<_> = reader.read_all()?;
+        let input_count = input_alns.len();
+        eprintln!("Read {} alignments from FastGA output (with embedded GDB)", input_count);
+        
+        // Now filter using create_with_gdb (copying the embedded GDB)
+        let output_path = temp_dir.path().join("output.1aln");
+        let mut filtered_writer = AlnWriter::create_with_gdb(&output_path, &input_path, true)?;
+        
+        // Write all alignments
+        for aln in &input_alns {
+            filtered_writer.write_alignment(aln)?;
+        }
+        eprintln!("Wrote {} alignments with create_with_gdb", input_count);
+        filtered_writer.finalize();
+        
+        // Try to read back
+        let mut reader2 = AlnReader::open(&output_path)?;
+        let output_alns: Vec<_> = reader2.read_all()?;
+        let output_count = output_alns.len();
+        eprintln!("Read back {} alignments", output_count);
+        
+        assert_eq!(input_count, output_count, 
+                   "BUG REPRODUCED! Wrote {} alignments but read back {} when input had embedded GDB!", 
+                   input_count, output_count);
+        
+        Ok(())
     }
 }
