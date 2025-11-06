@@ -190,7 +190,5 @@ where
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     // Test removed - embedded binaries approach no longer used
 }

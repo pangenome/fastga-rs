@@ -4,6 +4,7 @@ use anyhow::Result;
 use fastga_rs::{Config, FastGA};
 use std::path::Path;
 
+#[allow(unused_variables)]
 fn main() -> Result<()> {
     // Create aligner with default configuration
     println!("Creating FastGA aligner with default configuration...");

@@ -164,7 +164,7 @@ mod tests {
                 eprintln!("  Found {} alignments", alignments.len());
             }
             Err(e) => {
-                eprintln!("⚠ Subprocess API alignment failed: {}", e);
+                eprintln!("⚠ Subprocess API alignment failed: {e}");
                 eprintln!("  This might be expected for test data");
             }
         }

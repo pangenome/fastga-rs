@@ -26,7 +26,7 @@ fn test_intermediate_pipeline() -> Result<()> {
         .build();
 
     let pipeline = AlignmentPipeline::new(config).with_progress(|stage, msg| {
-        eprintln!("[Test Progress] {}: {}", stage, msg);
+        eprintln!("[Test Progress] {stage}: {msg}");
     });
 
     // Test individual steps
@@ -40,11 +40,11 @@ fn test_intermediate_pipeline() -> Result<()> {
     eprintln!("\nStep 2: Database Preparation");
     match pipeline.prepare_database(&test_fa) {
         Ok(db_path) => {
-            eprintln!("Database created: {:?}", db_path);
+            eprintln!("Database created: {db_path:?}");
             assert!(db_path.exists());
         }
         Err(e) => {
-            eprintln!("Database preparation failed (expected): {}", e);
+            eprintln!("Database preparation failed (expected): {e}");
             eprintln!("This is OK - FastGA utilities may have issues with simple test data");
         }
     }
@@ -72,7 +72,7 @@ fn test_timeout_aligner() -> Result<()> {
     let aligner = TimeoutAligner::new(config)
         .with_timeout(Duration::from_secs(5))
         .with_progress(|stage, msg| {
-            eprintln!("[Timeout Test] {}: {}", stage, msg);
+            eprintln!("[Timeout Test] {stage}: {msg}");
         });
 
     eprintln!("\n=== Testing Timeout Aligner ===");
@@ -82,10 +82,10 @@ fn test_timeout_aligner() -> Result<()> {
             eprintln!("Success! Found {} alignments", alignments.len());
             // NOTE: FastGA may return 0 alignments for simple test sequences
             // This is a known issue with the underlying C code
-            assert!(alignments.len() >= 0);
+            // Just verify we got a result without error
         }
         Err(e) => {
-            eprintln!("Alignment failed (expected with simple test data): {}", e);
+            eprintln!("Alignment failed (expected with simple test data): {e}");
             // This is expected - FastGA has issues with simple test sequences
         }
     }
@@ -121,7 +121,7 @@ fn test_with_real_data() -> Result<()> {
         .build();
 
     let pipeline = AlignmentPipeline::new(config).with_progress(|stage, msg| {
-        eprintln!("[Real Data Test] {}: {}", stage, msg);
+        eprintln!("[Real Data Test] {stage}: {msg}");
     });
 
     match pipeline.run_full_pipeline(&chr_fa, &chr_fa) {
@@ -130,7 +130,7 @@ fn test_with_real_data() -> Result<()> {
             assert!(!paf_output.is_empty());
         }
         Err(e) => {
-            eprintln!("Pipeline failed: {}", e);
+            eprintln!("Pipeline failed: {e}");
             return Err(e.into());
         }
     }

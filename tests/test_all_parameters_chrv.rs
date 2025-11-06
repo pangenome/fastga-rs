@@ -37,7 +37,7 @@ fn test_all_parameters_with_chrv() -> Result<()> {
     let aligner = FastGA::new(config)?;
     let result = aligner.align_files(&chrv_path, &chrv_path)?;
     eprintln!("✓ Basic params: {} alignments found", result.len());
-    assert!(result.len() > 0, "Should find alignments with basic params");
+    assert!(!result.is_empty(), "Should find alignments with basic params");
 
     // Test 2: Verbose mode with log file
     eprintln!("\n--- Test 2: Verbose Mode + Log File ---");
@@ -54,7 +54,7 @@ fn test_all_parameters_with_chrv() -> Result<()> {
 
     if log_path.exists() {
         let log_size = std::fs::metadata(&log_path)?.len();
-        eprintln!("✓ Log file created: {} bytes", log_size);
+        eprintln!("✓ Log file created: {log_size} bytes");
     }
 
     // Test 3: Different output formats
@@ -77,7 +77,7 @@ fn test_all_parameters_with_chrv() -> Result<()> {
                 eprintln!("✓ {} format: {} alignments", name, result.len());
             }
             Err(e) => {
-                eprintln!("⚠ {} format failed: {}", name, e);
+                eprintln!("⚠ {name} format failed: {e}");
             }
         }
     }
@@ -136,7 +136,7 @@ fn test_all_parameters_with_chrv() -> Result<()> {
             eprintln!("✓ Symmetric seeding: {} alignments", result.len());
         }
         Err(e) => {
-            eprintln!("⚠ Symmetric seeding failed (expected): {}", e);
+            eprintln!("⚠ Symmetric seeding failed (expected): {e}");
         }
     }
 
@@ -154,7 +154,7 @@ fn test_all_parameters_with_chrv() -> Result<()> {
                 eprintln!("✓ {} preset: {} alignments", name, result.len());
             }
             Err(e) => {
-                eprintln!("⚠ {} preset failed: {}", name, e);
+                eprintln!("⚠ {name} preset failed: {e}");
             }
         }
     }

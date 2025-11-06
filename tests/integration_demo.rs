@@ -13,7 +13,7 @@ use tempfile::tempdir;
 /// Create a test FASTA file with realistic sequences
 fn create_test_fasta(path: &Path, name: &str, sequence: &str) -> std::io::Result<()> {
     let mut file = File::create(path)?;
-    writeln!(file, ">{}", name)?;
+    writeln!(file, ">{name}")?;
     // Write sequence in 80-character lines (FASTA standard)
     for chunk in sequence.as_bytes().chunks(80) {
         writeln!(file, "{}", std::str::from_utf8(chunk).unwrap())?;
@@ -60,24 +60,24 @@ fn test_complete_integration_workflow() {
     println!("\n--- Testing Intermediate Pipeline API ---");
     {
         let pipeline = AlignmentPipeline::new(config.clone()).with_progress(|stage, msg| {
-            println!("  [Pipeline] {}: {}", stage, msg);
+            println!("  [Pipeline] {stage}: {msg}");
         });
 
         // Validate inputs
         match pipeline.validate_inputs(&query_path, &target_path) {
             Ok(_) => println!("✓ Input validation passed"),
-            Err(e) => println!("✗ Input validation failed: {}", e),
+            Err(e) => println!("✗ Input validation failed: {e}"),
         }
 
         // Prepare databases
         match pipeline.prepare_database(&query_path) {
-            Ok(db) => println!("✓ Query database created: {:?}", db),
-            Err(e) => println!("✗ Query database failed: {}", e),
+            Ok(db) => println!("✓ Query database created: {db:?}"),
+            Err(e) => println!("✗ Query database failed: {e}"),
         }
 
         match pipeline.prepare_database(&target_path) {
-            Ok(db) => println!("✓ Target database created: {:?}", db),
-            Err(e) => println!("✗ Target database failed: {}", e),
+            Ok(db) => println!("✓ Target database created: {db:?}"),
+            Err(e) => println!("✗ Target database failed: {e}"),
         }
 
         // Note: Full alignment may fail due to FastGA issues
@@ -89,7 +89,7 @@ fn test_complete_integration_workflow() {
                 }
             }
             Err(e) => {
-                println!("✗ Pipeline failed (expected): {}", e);
+                println!("✗ Pipeline failed (expected): {e}");
                 println!("  This is a known issue with FastGA on simple test data");
             }
         }
@@ -101,7 +101,7 @@ fn test_complete_integration_workflow() {
         let aligner = TimeoutAligner::new(config.clone())
             .with_timeout(Duration::from_secs(5))
             .with_progress(|stage, msg| {
-                println!("  [Timeout] {}: {}", stage, msg);
+                println!("  [Timeout] {stage}: {msg}");
             });
 
         match aligner.align_files(&query_path, &target_path) {
@@ -118,7 +118,7 @@ fn test_complete_integration_workflow() {
                 }
             }
             Err(e) => {
-                println!("✗ Timeout alignment failed: {}", e);
+                println!("✗ Timeout alignment failed: {e}");
                 println!("  This is expected with current FastGA issues");
             }
         }
@@ -134,7 +134,7 @@ fn test_complete_integration_workflow() {
                 println!("✓ Simple API succeeded: {} alignments", alignments.len());
             }
             Err(e) => {
-                println!("✗ Simple API failed: {}", e);
+                println!("✗ Simple API failed: {e}");
             }
         }
     }
@@ -154,7 +154,7 @@ fn test_complete_integration_workflow() {
                 println!("  Identity: {:.2}%", aln.identity() * 100.0);
             }
             Err(e) => {
-                println!("✗ PAF parsing failed: {}", e);
+                println!("✗ PAF parsing failed: {e}");
             }
         }
     }
@@ -215,7 +215,7 @@ fn test_error_handling_and_recovery() {
         let elapsed = start.elapsed();
 
         assert!(elapsed < Duration::from_secs(2));
-        println!("✓ Timeout mechanism works (completed in {:?})", elapsed);
+        println!("✓ Timeout mechanism works (completed in {elapsed:?})");
     }
 
     println!("\n=== Error Handling Test Complete ===");

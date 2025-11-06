@@ -1,5 +1,6 @@
 //! Real-world test using actual yeast genome data
 //! This validates identity calculations and plane sweep scoring on real alignments
+#![allow(non_snake_case)]
 
 use anyhow::Result;
 use fastga_rs::{Config, FastGA};
@@ -62,9 +63,9 @@ fn test_chrV_identity_scoring() -> Result<()> {
 
     // Print summary statistics
     println!("\nAlignment Categories:");
-    println!("  Perfect matches (100% identity): {}", perfect_matches);
-    println!("  High identity (≥95%): {}", high_identity);
-    println!("  Moderate identity (≥80%): {}", moderate_identity);
+    println!("  Perfect matches (100% identity): {perfect_matches}");
+    println!("  High identity (≥95%): {high_identity}");
+    println!("  Moderate identity (≥80%): {moderate_identity}");
 
     // Examine top alignments by plane sweep score
     let mut scored_alignments: Vec<_> = alignments
@@ -103,7 +104,7 @@ fn test_chrV_identity_scoring() -> Result<()> {
         } else {
             alignment.cigar.clone()
         };
-        println!("   CIGAR: {}", cigar_preview);
+        println!("   CIGAR: {cigar_preview}");
     }
 
     // Verify specific expectations about real yeast alignments
@@ -147,7 +148,7 @@ fn test_chrV_identity_scoring() -> Result<()> {
 
     // For self-alignment, most should be high identity
     assert!(
-        high_quality_alignments.len() > 0,
+        !high_quality_alignments.is_empty(),
         "Should have high-identity alignments"
     );
 
@@ -167,8 +168,7 @@ fn test_chrV_identity_scoring() -> Result<()> {
             test_alignment.query_name, test_alignment.target_name
         );
         println!(
-            "CIGAR operators: {} matches (=), {} mismatches (X)",
-            match_count, mismatch_count
+            "CIGAR operators: {match_count} matches (=), {mismatch_count} mismatches (X)"
         );
 
         // Parse CIGAR to calculate expected identity
@@ -194,15 +194,13 @@ fn test_chrV_identity_scoring() -> Result<()> {
             let expected_identity = matches as f64 / total_bases as f64;
             let reported_identity = test_alignment.identity();
 
-            println!("Expected identity from CIGAR: {:.4}", expected_identity);
-            println!("Reported identity: {:.4}", reported_identity);
+            println!("Expected identity from CIGAR: {expected_identity:.4}");
+            println!("Reported identity: {reported_identity:.4}");
 
             // They should match within floating point tolerance
             assert!(
                 (expected_identity - reported_identity).abs() < 0.01,
-                "Identity calculation mismatch: expected {:.4}, got {:.4}",
-                expected_identity,
-                reported_identity
+                "Identity calculation mismatch: expected {expected_identity:.4}, got {reported_identity:.4}"
             );
         }
     }
@@ -234,10 +232,9 @@ fn test_plane_sweep_scoring_properties() -> Result<()> {
         let perfect_score = perfect.identity() * (perfect_length as f64).ln();
 
         println!("\n=== Plane Sweep Score Properties ===");
-        println!("Perfect alignment (100% identity, {} bp):", perfect_length);
+        println!("Perfect alignment (100% identity, {perfect_length} bp):");
         println!(
-            "  Score = 1.0 × ln({}) = {:.2}",
-            perfect_length, perfect_score
+            "  Score = 1.0 × ln({perfect_length}) = {perfect_score:.2}"
         );
 
         // Now test with sequences that have mismatches

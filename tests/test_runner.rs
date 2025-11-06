@@ -49,11 +49,11 @@ fn test_orchestrator_full_pipeline() {
     match orchestrator.align(&query_fa, &target_fa) {
         Ok(output) => {
             eprintln!("✓ Alignment succeeded!");
-            eprintln!("Output: {}", output);
+            eprintln!("Output: {output}");
 
             // Default format is .1aln, so output should be a file path
             if output.contains(".1aln") {
-                eprintln!("✓ Output is .1aln file path: {}", output);
+                eprintln!("✓ Output is .1aln file path: {output}");
 
                 // Verify the file exists
                 use std::path::Path;
@@ -67,7 +67,7 @@ fn test_orchestrator_full_pipeline() {
             }
         }
         Err(e) => {
-            eprintln!("✗ Full pipeline failed: {}", e);
+            eprintln!("✗ Full pipeline failed: {e}");
             eprintln!("This might be expected if FastGA binary is not available");
         }
     }
@@ -135,7 +135,7 @@ fn test_orchestrator_paf_output() {
             }
         }
         Err(e) => {
-            eprintln!("✗ PAF conversion failed: {}", e);
+            eprintln!("✗ PAF conversion failed: {e}");
         }
     }
 }

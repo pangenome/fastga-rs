@@ -69,7 +69,7 @@ fn example_simple_streaming(genome1: &Path, genome2: &Path) -> Result<()> {
     })?;
 
     println!("\nProcessed {} alignments", stats.total_alignments);
-    println!("Total aligned bases: {}", total_bases);
+    println!("Total aligned bases: {total_bases}");
     println!();
 
     Ok(())
@@ -190,7 +190,7 @@ fn example_statistics(genome1: &Path, genome2: &Path) -> Result<()> {
         if *count > 0 {
             let start = i * 10;
             let end = (i + 1) * 10;
-            println!("  {}%-{}%: {} alignments", start, end, count);
+            println!("  {start}%-{end}%: {count} alignments");
         }
     }
 
@@ -209,7 +209,7 @@ fn example_statistics(genome1: &Path, genome2: &Path) -> Result<()> {
     let mut query_vec: Vec<_> = counts.iter().collect();
     query_vec.sort_by_key(|&(_, count)| std::cmp::Reverse(*count));
     for (query, count) in query_vec.iter().take(3) {
-        println!("  {}: {} alignments", query, count);
+        println!("  {query}: {count} alignments");
     }
 
     println!();

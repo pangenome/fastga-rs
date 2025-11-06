@@ -60,11 +60,11 @@ fn test_prepare_and_align_separately() {
     file.flush().unwrap();
 
     let bin_dir = find_bin_dir();
-    println!("Using binaries from: {}", bin_dir);
+    println!("Using binaries from: {bin_dir}");
 
     // Step 1: Convert to GDB using FAtoGDB directly
     println!("\n=== Step 1: FAtoGDB ===");
-    let fatogdb = format!("{}/FAtoGDB", bin_dir);
+    let fatogdb = format!("{bin_dir}/FAtoGDB");
     if Path::new(&fatogdb).exists() {
         let output = Command::new(&fatogdb).arg(&test_fa).output().unwrap();
 
@@ -84,12 +84,12 @@ fn test_prepare_and_align_separately() {
             );
         }
     } else {
-        println!("✗ FAtoGDB not found at {}", fatogdb);
+        println!("✗ FAtoGDB not found at {fatogdb}");
     }
 
     // Step 2: Create index using GIXmake
     println!("\n=== Step 2: GIXmake ===");
-    let gixmake = format!("{}/GIXmake", bin_dir);
+    let gixmake = format!("{bin_dir}/GIXmake");
     if Path::new(&gixmake).exists() {
         let base_name = test_fa.with_extension("");
         let output = Command::new(&gixmake)
@@ -115,7 +115,7 @@ fn test_prepare_and_align_separately() {
             );
         }
     } else {
-        println!("✗ GIXmake not found at {}", gixmake);
+        println!("✗ GIXmake not found at {gixmake}");
     }
 
     // Step 3: Use our Rust API to align (which will reuse the GDB files)
@@ -136,7 +136,7 @@ fn test_prepare_and_align_separately() {
             );
 
             // Verify we got some alignments
-            if alignments.len() > 0 {
+            if !alignments.is_empty() {
                 println!("✓ Got alignments from prepared files");
             } else {
                 // This is expected for simple repetitive sequences
@@ -144,7 +144,7 @@ fn test_prepare_and_align_separately() {
             }
         }
         Err(e) => {
-            println!("⚠ FastGA alignment failed: {}", e);
+            println!("⚠ FastGA alignment failed: {e}");
             println!("  (This is expected for simple repetitive sequences)");
         }
     }

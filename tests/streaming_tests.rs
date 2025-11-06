@@ -1,8 +1,9 @@
 //! Comprehensive tests for the streaming API.
+#![allow(non_snake_case)]
 
 use anyhow::Result;
 use fastga_rs::streaming::{align_streaming_simple, BestHitFilter, StreamingAligner};
-use fastga_rs::{Alignment, Config, FastGA};
+use fastga_rs::{Alignment, Config};
 use std::fs;
 use std::path::Path;
 use std::sync::{Arc, Mutex};

@@ -2,8 +2,6 @@
 use anyhow::Result;
 use fastga_rs::api::FastGA;
 use fastga_rs::Config;
-use std::fs::File;
-use std::io::{Read, Write};
 use std::path::Path;
 use std::process::Command;
 use tempfile::tempdir;
@@ -72,7 +70,7 @@ fn test_yeast_chrv_self_alignment() -> Result<()> {
             eprintln!("\n=== ALIGNMENT SUCCESSFUL ===");
             eprintln!("✓ Found {} alignments", alignments.len());
 
-            if alignments.len() > 0 {
+            if !alignments.is_empty() {
                 // Get PAF output
                 let paf = alignments.to_paf()?;
                 let paf_lines: Vec<&str> = paf.lines().collect();
@@ -98,7 +96,7 @@ fn test_yeast_chrv_self_alignment() -> Result<()> {
 
                 // Verify we got the expected self-alignment
                 assert!(
-                    alignments.len() >= 1,
+                    !alignments.is_empty(),
                     "Should have at least one alignment (self)"
                 );
 
@@ -119,7 +117,7 @@ fn test_yeast_chrv_self_alignment() -> Result<()> {
             eprintln!("\n=== TEST PASSED ===");
         }
         Err(e) => {
-            eprintln!("\n✗ Alignment failed: {}", e);
+            eprintln!("\n✗ Alignment failed: {e}");
             eprintln!("This might be expected if FastGA has strict requirements");
             // Don't fail the test - just report
         }

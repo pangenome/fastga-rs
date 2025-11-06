@@ -30,8 +30,7 @@ fn test_fastga_processes_queries_sequentially() -> Result<()> {
     std::fs::write(
         &queries_fasta,
         format!(
-            ">query_A\n{}\n>query_B\n{}\n>query_C\n{}\n",
-            seq_a, seq_b, seq_c
+            ">query_A\n{seq_a}\n>query_B\n{seq_b}\n>query_C\n{seq_c}\n"
         ),
     )?;
 
@@ -52,8 +51,7 @@ fn test_fastga_processes_queries_sequentially() -> Result<()> {
 
     std::fs::write(
         &target_fasta,
-        format!(">target_1_matches_A\n{}\n>target_2_matches_B\n{}\n>target_3_matches_C\n{}\n>target_4_mixed\n{}\n",
-            target_a, target_b, target_c, target_mixed)
+        format!(">target_1_matches_A\n{target_a}\n>target_2_matches_B\n{target_b}\n>target_3_matches_C\n{target_c}\n>target_4_mixed\n{target_mixed}\n")
     )?;
 
     // Use our fork-based FastGA API with single thread to ensure deterministic order
@@ -100,9 +98,9 @@ fn test_fastga_processes_queries_sequentially() -> Result<()> {
     }
 
     println!("\nAlignment counts:");
-    println!("  query_A: {} alignments", query_a_count);
-    println!("  query_B: {} alignments", query_b_count);
-    println!("  query_C: {} alignments", query_c_count);
+    println!("  query_A: {query_a_count} alignments");
+    println!("  query_B: {query_b_count} alignments");
+    println!("  query_C: {query_c_count} alignments");
 
     // Each query should have at least one alignment (to its matching target)
     assert!(query_a_count >= 1, "query_A should have alignments");
@@ -157,7 +155,7 @@ fn test_query_completeness_with_multiple_targets() -> Result<()> {
     let queries_fasta = temp_dir.path().join("queries.fa");
     std::fs::write(
         &queries_fasta,
-        format!(">query_1\n{}\n>query_2\n{}\n", seq1, seq2),
+        format!(">query_1\n{seq1}\n>query_2\n{seq2}\n"),
     )?;
 
     // Multiple targets with good matches
@@ -212,8 +210,8 @@ fn test_query_completeness_with_multiple_targets() -> Result<()> {
     }
 
     println!("\n✓ Query completeness verified:");
-    println!("  Query 1 aligned to: {:?}", query_1_targets);
-    println!("  Query 2 aligned to: {:?}", query_2_targets);
+    println!("  Query 1 aligned to: {query_1_targets:?}");
+    println!("  Query 2 aligned to: {query_2_targets:?}");
 
     if !query_1_targets.is_empty() && !query_2_targets.is_empty() {
         println!("  All query_1 alignments completed before query_2 started");

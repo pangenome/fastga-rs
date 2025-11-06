@@ -39,13 +39,13 @@ fn test_database_preparation_works() -> Result<()> {
         .build();
 
     let pipeline = AlignmentPipeline::new(config).with_progress(|stage, msg| {
-        eprintln!("[Test] {}: {}", stage, msg);
+        eprintln!("[Test] {stage}: {msg}");
     });
 
     // Test that we can at least prepare the database
     match pipeline.prepare_database(&test_fa) {
         Ok(db_path) => {
-            eprintln!("SUCCESS: Database created at {:?}", db_path);
+            eprintln!("SUCCESS: Database created at {db_path:?}");
             assert!(db_path.exists(), "Database file should exist");
 
             // Check file size to ensure it has content
@@ -55,7 +55,7 @@ fn test_database_preparation_works() -> Result<()> {
             eprintln!("Database file size: {} bytes", metadata.len());
         }
         Err(e) => {
-            panic!("Database preparation should work but failed with: {}", e);
+            panic!("Database preparation should work but failed with: {e}");
         }
     }
 
@@ -88,11 +88,10 @@ fn test_alignment_api_structure() -> Result<()> {
     match aligner.align_files(&test_fa, &test_fa) {
         Ok(alignments) => {
             eprintln!("Alignment succeeded with {} results", alignments.len());
-            // If it works, great!
-            assert!(alignments.len() >= 0);
+            // If it works, great! Just verify we got a result
         }
         Err(e) => {
-            eprintln!("Expected failure: {}", e);
+            eprintln!("Expected failure: {e}");
             // FastGA has known issues with simple sequences, this is expected
             assert!(
                 e.to_string().contains("FastGA")

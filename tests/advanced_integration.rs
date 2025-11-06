@@ -3,7 +3,7 @@
 //! These tests verify more complex scenarios and edge cases.
 
 use anyhow::Result;
-use fastga_rs::{Alignment, Config, FastGA};
+use fastga_rs::{Config, FastGA};
 use std::fs;
 use std::path::Path;
 use tempfile::TempDir;
@@ -17,17 +17,17 @@ fn create_multi_sequence_fasta(
     let mut content = String::new();
 
     for i in 0..num_sequences {
-        content.push_str(&format!(">sequence_{}\n", i));
+        content.push_str(&format!(">sequence_{i}\n"));
         // Create longer sequences (>200bp) to satisfy all config presets including fast()
         // Use actual yeast sequence patterns repeated to reach required length
         let base_seq = "ATGGCAAAGAAGACCAAAGCTCCATCAGAAGAGGCCATCAAGAATCTTATGGCTAAGAAGACAAGCTATACGAGCCACGGAAGAACGCCTTGTGGTGGACAAGAAGCAGGTG";
-        let bases = if i % 2 == 0 {
+        let bases = if i.is_multiple_of(2) {
             // Original sequence repeated twice (>200bp)
-            format!("{}{}", base_seq, base_seq)
+            format!("{base_seq}{base_seq}")
         } else {
             // Slightly modified version with a mutation
             let modified = base_seq.replace("CTAT", "CTTT");
-            format!("{}{}", modified, modified)
+            format!("{modified}{modified}")
         };
         content.push_str(&bases);
         content.push('\n');
@@ -77,8 +77,7 @@ fn test_extended_cigar_operators() -> Result<()> {
 
         assert!(
             has_match_op || has_mismatch_op || cigar.is_empty(),
-            "CIGAR '{}' should contain extended operators",
-            cigar
+            "CIGAR '{cigar}' should contain extended operators"
         );
 
         // If we have a good alignment, verify the CIGAR makes sense
@@ -178,15 +177,14 @@ fn test_identity_calculation_accuracy() -> Result<()> {
         // For plane sweep scoring: identity * log(length)
         let score = identity * (length as f64).ln();
 
-        println!("Identity: {:.4}", identity);
-        println!("Length: {}", length);
-        println!("Plane sweep score (identity * ln(length)): {:.4}", score);
+        println!("Identity: {identity:.4}");
+        println!("Length: {length}");
+        println!("Plane sweep score (identity * ln(length)): {score:.4}");
 
         // Identity should be very high (158/160 = 0.9875)
         assert!(
             identity > 0.98 && identity < 1.0,
-            "Identity {} should be ~0.9875 for 2 mismatches in 160bp",
-            identity
+            "Identity {identity} should be ~0.9875 for 2 mismatches in 160bp"
         );
     }
 
@@ -277,12 +275,11 @@ fn test_paf_format_compliance() -> Result<()> {
             if has_cigar {
                 // Find and validate CIGAR
                 for field in fields.iter().skip(12) {
-                    if field.starts_with("cg:Z:") {
-                        let cigar = &field[5..];
+                    if let Some(cigar) = field.strip_prefix("cg:Z:") {
                         // Extended CIGAR should have valid operators
                         for c in cigar.chars() {
                             if c.is_alphabetic() {
-                                assert!("MIDNSHP=X".contains(c), "Invalid CIGAR operator: {}", c);
+                                assert!("MIDNSHP=X".contains(c), "Invalid CIGAR operator: {c}");
                             }
                         }
                     }

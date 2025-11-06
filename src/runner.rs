@@ -284,7 +284,7 @@ mod tests {
                 println!("Alignment succeeded: {} bytes output", output.len());
             }
             Err(e) => {
-                println!("Alignment failed (might be expected): {}", e);
+                println!("Alignment failed (might be expected): {e}");
             }
         }
     }

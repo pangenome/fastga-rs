@@ -1,4 +1,5 @@
 //! Integration tests for FastGA-RS using real yeast genome data.
+#![allow(non_snake_case)]
 
 use anyhow::Result;
 use fastga_rs::{Config, FastGA};
@@ -67,7 +68,7 @@ fn test_chrV_self_alignment() -> Result<()> {
     );
 
     println!("\nPAF output (first line):");
-    println!("{}", first_line);
+    println!("{first_line}");
 
     Ok(())
 }
@@ -117,7 +118,7 @@ fn test_chrV_alignment_coverage() -> Result<()> {
 
     // For homologous chromosomes, we expect good coverage
     // There are 7 strains in the test data
-    let expected_strains = 7;
+    let _expected_strains = 7;
 
     println!("\nPer-query coverage:");
     for (query_name, query_alignments) in &groups {
@@ -147,15 +148,13 @@ fn test_chrV_alignment_coverage() -> Result<()> {
         // we expect coverage > 1.0 (at least the self-alignment)
         assert!(
             coverage >= 1.0,
-            "Query {} has insufficient coverage: {:.2}x",
-            query_name,
-            coverage
+            "Query {query_name} has insufficient coverage: {coverage:.2}x"
         );
 
         // With 7 homologous strains, we expect multiple alignments per query
         // Each query should align to itself and to other strains
         assert!(
-            query_alignments.len() >= 1,
+            !query_alignments.is_empty(),
             "Query {} has too few alignments: {}",
             query_name,
             query_alignments.len()
@@ -234,7 +233,7 @@ fn test_chrV_cross_strain_alignment() -> Result<()> {
     // Track self-alignments by sequence name to find the best/longest one
     let mut self_coverage: std::collections::HashMap<String, Vec<_>> =
         std::collections::HashMap::new();
-    let mut cross_strain_alignments = 0;
+    let mut _cross_strain_alignments = 0;
 
     for aln in &alignments.alignments {
         if aln.query_name == aln.target_name {
@@ -244,7 +243,7 @@ fn test_chrV_cross_strain_alignment() -> Result<()> {
                 .or_insert(Vec::new())
                 .push(aln);
         } else {
-            cross_strain_alignments += 1;
+            _cross_strain_alignments += 1;
             let identity = aln.identity();
             println!(
                 "Cross-strain alignment: {} vs {} = {:.2}%",
@@ -279,13 +278,11 @@ fn test_chrV_cross_strain_alignment() -> Result<()> {
         // Main self-alignment should have near-complete coverage and perfect identity
         assert!(
             coverage > 0.95,
-            "{} should have >95% self-alignment coverage",
-            strain
+            "{strain} should have >95% self-alignment coverage"
         );
         assert!(
             main_aln.identity() > 0.99,
-            "{} self-alignment should be >99% identity",
-            strain
+            "{strain} self-alignment should be >99% identity"
         );
     }
 

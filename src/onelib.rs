@@ -77,7 +77,7 @@ impl AlnReader {
     /// Open a .1aln file for reading
     pub fn open<P: AsRef<Path>>(path: P) -> Result<Self> {
         let path_str = path.as_ref().to_str().context("Invalid path")?;
-        eprintln!("[AlnReader::open] Opening {}", path_str);
+        eprintln!("[AlnReader::open] Opening {path_str}");
 
         // Create schema for .1aln files
         let schema = create_aln_schema()?;
@@ -105,26 +105,6 @@ impl AlnReader {
         })
     }
 
-    /// Count the total number of alignments in the file
-    fn count_alignments(file: &mut OneFile) -> Result<i64> {
-        let mut count = 0i64;
-
-        loop {
-            let line_type = file.read_line();
-            if line_type == '\0' {
-                break; // EOF
-            }
-            if line_type == 'A' {
-                count += 1;
-            }
-        }
-
-        // Reset to beginning of alignments
-        // Use object number 1 (first alignment) instead of 0 (before first)
-        file.goto('A', 1)?;
-
-        Ok(count)
-    }
 
     /// Get total number of alignments in the file
     pub fn num_alignments(&self) -> i64 {
@@ -899,7 +879,7 @@ mod gdb_bug_test {
             filtered_writer.write_alignment(&aln)?;
             count += 1;
         }
-        eprintln!("Wrote {} alignments with create_with_gdb", count);
+        eprintln!("Wrote {count} alignments with create_with_gdb");
         filtered_writer.finalize();
         
         // Try to read back
@@ -908,9 +888,9 @@ mod gdb_bug_test {
         while let Some(_aln) = reader2.read_alignment()? {
             read_count += 1;
         }
-        eprintln!("Read back {} alignments", read_count);
+        eprintln!("Read back {read_count} alignments");
         
-        assert_eq!(count, read_count, "Wrote {} alignments but read back {}!", count, read_count);
+        assert_eq!(count, read_count, "Wrote {count} alignments but read back {read_count}!");
         
         Ok(())
     }
@@ -948,7 +928,7 @@ mod gdb_bug_test {
         let mut reader = AlnReader::open(&input_path)?;
         let input_alns: Vec<_> = reader.read_all()?;
         let input_count = input_alns.len();
-        eprintln!("Read {} alignments from FastGA output (with embedded GDB)", input_count);
+        eprintln!("Read {input_count} alignments from FastGA output (with embedded GDB)");
         
         // Now filter using create_with_gdb (copying the embedded GDB)
         let output_path = temp_dir.path().join("output.1aln");
@@ -958,18 +938,17 @@ mod gdb_bug_test {
         for aln in &input_alns {
             filtered_writer.write_alignment(aln)?;
         }
-        eprintln!("Wrote {} alignments with create_with_gdb", input_count);
+        eprintln!("Wrote {input_count} alignments with create_with_gdb");
         filtered_writer.finalize();
         
         // Try to read back
         let mut reader2 = AlnReader::open(&output_path)?;
         let output_alns: Vec<_> = reader2.read_all()?;
         let output_count = output_alns.len();
-        eprintln!("Read back {} alignments", output_count);
-        
-        assert_eq!(input_count, output_count, 
-                   "BUG REPRODUCED! Wrote {} alignments but read back {} when input had embedded GDB!", 
-                   input_count, output_count);
+        eprintln!("Read back {output_count} alignments");
+
+        assert_eq!(input_count, output_count,
+                   "BUG REPRODUCED! Wrote {input_count} alignments but read back {output_count} when input had embedded GDB!");
         
         Ok(())
     }

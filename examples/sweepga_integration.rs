@@ -41,7 +41,7 @@ fn main() -> Result<()> {
             if let Ok(paf) = alignments.to_paf() {
                 println!("PAF output:");
                 for line in paf.lines().take(5) {
-                    println!("{}", line);
+                    println!("{line}");
                 }
                 if alignments.len() > 5 {
                     println!("... ({} more alignments)", alignments.len() - 5);
@@ -49,7 +49,7 @@ fn main() -> Result<()> {
             }
         }
         Err(e) => {
-            eprintln!("Alignment failed: {}", e);
+            eprintln!("Alignment failed: {e}");
             return Err(e.into());
         }
     }

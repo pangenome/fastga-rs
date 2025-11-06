@@ -59,7 +59,7 @@ fn main() -> Result<()> {
     println!("\n4. Per-query output files:");
     let groups = alignments.group_by_query();
     for (query_name, query_alignments) in groups.iter().take(3) {
-        let filename = format!("{}_alignments.paf", query_name);
+        let filename = format!("{query_name}_alignments.paf");
         let mut query_aligns = Alignments::new();
         query_aligns.alignments = query_alignments.iter().map(|&a| a.clone()).collect();
         query_aligns.write_paf(&filename)?;
