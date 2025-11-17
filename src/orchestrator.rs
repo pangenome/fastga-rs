@@ -134,7 +134,10 @@ impl FastGAOrchestrator {
             .current_dir(working_dir);
 
         // Log the actual command being executed
-        let args_str: Vec<String> = cmd.get_args().map(|s| s.to_string_lossy().to_string()).collect();
+        let args_str: Vec<String> = cmd
+            .get_args()
+            .map(|s| s.to_string_lossy().to_string())
+            .collect();
         eprintln!(
             "[FastGA] Calling FastGA: {} {} (in dir: {})",
             fastga_bin.display(),
@@ -322,7 +325,10 @@ impl FastGAOrchestrator {
             .current_dir(working_dir);
 
         // Log the actual command being executed
-        let args_str: Vec<String> = cmd.get_args().map(|s| s.to_string_lossy().to_string()).collect();
+        let args_str: Vec<String> = cmd
+            .get_args()
+            .map(|s| s.to_string_lossy().to_string())
+            .collect();
         eprintln!(
             "[FastGA] Calling FastGA: {} {} (in dir: {})",
             fastga_bin.display(),
