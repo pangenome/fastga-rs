@@ -109,17 +109,7 @@ impl FastGAOrchestrator {
         let temp_aln = working_dir.join(format!("_tmp_{}.1aln", std::process::id()));
         let temp_aln_rel = temp_aln.file_name().unwrap();
 
-        eprintln!(
-            "[FastGA] Calling FastGA: {} -1:{} -T{} -i{:.2} {} {} (in dir: {})",
-            fastga_bin.display(),
-            temp_aln_rel.to_string_lossy(),
-            self.num_threads,
-            self.min_identity,
-            query_filename.to_string_lossy(),
-            target_filename.to_string_lossy(),
-            working_dir.display()
-        );
-
+        // Build command first so we can log actual args
         let mut cmd = std::process::Command::new(&fastga_bin);
         cmd.arg(format!("-1:{}", temp_aln_rel.to_string_lossy()))
             .arg(format!("-T{}", self.num_threads));
@@ -137,6 +127,15 @@ impl FastGAOrchestrator {
         cmd.arg(query_filename)
             .arg(target_filename)
             .current_dir(working_dir);
+
+        // Log the actual command being executed
+        let args_str: Vec<String> = cmd.get_args().map(|s| s.to_string_lossy().to_string()).collect();
+        eprintln!(
+            "[FastGA] Calling FastGA: {} {} (in dir: {})",
+            fastga_bin.display(),
+            args_str.join(" "),
+            working_dir.display()
+        );
 
         let output = cmd
             .output()
@@ -293,17 +292,7 @@ impl FastGAOrchestrator {
         let temp_aln = working_dir.join(format!("_tmp_{}.1aln", std::process::id()));
         let temp_aln_rel = temp_aln.file_name().unwrap();
 
-        eprintln!(
-            "[FastGA] Calling FastGA: {} -1:{} -T{} -i{:.2} {} {} (in dir: {})",
-            fastga_bin.display(),
-            temp_aln_rel.to_string_lossy(),
-            self.num_threads,
-            self.min_identity,
-            query_filename.to_string_lossy(),
-            target_filename.to_string_lossy(),
-            working_dir.display()
-        );
-
+        // Build command first so we can log actual args
         let mut cmd = std::process::Command::new(&fastga_bin);
         cmd.arg(format!("-1:{}", temp_aln_rel.to_string_lossy()))
             .arg(format!("-T{}", self.num_threads));
@@ -321,6 +310,15 @@ impl FastGAOrchestrator {
         cmd.arg(query_filename)
             .arg(target_filename)
             .current_dir(working_dir);
+
+        // Log the actual command being executed
+        let args_str: Vec<String> = cmd.get_args().map(|s| s.to_string_lossy().to_string()).collect();
+        eprintln!(
+            "[FastGA] Calling FastGA: {} {} (in dir: {})",
+            fastga_bin.display(),
+            args_str.join(" "),
+            working_dir.display()
+        );
 
         let output = cmd
             .output()
