@@ -114,6 +114,11 @@ impl FastGAOrchestrator {
         cmd.arg(format!("-1:{}", temp_aln_rel.to_string_lossy()))
             .arg(format!("-T{}", self.num_threads));
 
+        // Add -f for adaptive seed cutoff (FastGA default is 10)
+        if self.kmer_freq != 10 {
+            cmd.arg(format!("-f{}", self.kmer_freq));
+        }
+
         // Only add -l if it's > 0 (FastGA's default is 0 anyway)
         if self.min_length > 0 {
             cmd.arg(format!("-l{}", self.min_length));
@@ -296,6 +301,11 @@ impl FastGAOrchestrator {
         let mut cmd = std::process::Command::new(&fastga_bin);
         cmd.arg(format!("-1:{}", temp_aln_rel.to_string_lossy()))
             .arg(format!("-T{}", self.num_threads));
+
+        // Add -f for adaptive seed cutoff (FastGA default is 10)
+        if self.kmer_freq != 10 {
+            cmd.arg(format!("-f{}", self.kmer_freq));
+        }
 
         // Only add -l if it's > 0 (FastGA's default is 0 anyway)
         if self.min_length > 0 {
