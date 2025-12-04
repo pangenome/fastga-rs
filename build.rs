@@ -35,6 +35,7 @@ fn main() {
 
     // We need to compile each program separately to avoid redefining main multiple times
     // First compile FastGA with main renamed
+    // Note: With ZSTD_KTAB, FastGA can transparently read compressed .ktab.*.zst files
     let mut fastga_build = cc::Build::new();
     fastga_build
         .file(fastga_dir.join("FastGA.c"))
@@ -42,11 +43,15 @@ fn main() {
         .file(fastga_dir.join("align.c"))
         .file(fastga_dir.join("alncode.c"))
         .file(fastga_dir.join("RSDsort.c"))
+        // zstd seekable decompression support
+        .file(fastga_dir.join("zstdseek_decompress.c"))
+        .file(fastga_dir.join("xxhash.c"))
         .include(&fastga_dir)
         .flag("-O3")
         .flag("-fno-strict-aliasing")
         .warnings(false)
         .define("_GNU_SOURCE", None)
+        .define("ZSTD_KTAB", None)
         .compile("fastga_main");
 
     // Compile FAtoGDB with main renamed
@@ -75,6 +80,7 @@ fn main() {
         .compile("gixmake_main");
 
     // Compile common dependencies
+    // Note: With ZSTD_KTAB, libfastk.c can transparently read compressed .ktab.*.zst files
     let mut common_build = cc::Build::new();
     common_build
         .file(fastga_dir.join("GDB.c"))
@@ -83,24 +89,29 @@ fn main() {
         .file(fastga_dir.join("ONElib.c"))
         .file(fastga_dir.join("hash.c"))
         .file(fastga_dir.join("select.c"))
+        // zstd seekable decompression support
+        .file(fastga_dir.join("zstdseek_decompress.c"))
+        .file(fastga_dir.join("xxhash.c"))
         .include(&fastga_dir)
         .flag("-O3")
         .flag("-fno-strict-aliasing")
         .warnings(false)
         .define("_GNU_SOURCE", None)
+        .define("ZSTD_KTAB", None)
         .compile("fastga_common");
 
     // Link required system libraries
     println!("cargo:rustc-link-lib=pthread");
     println!("cargo:rustc-link-lib=m");
     println!("cargo:rustc-link-lib=z");
+    println!("cargo:rustc-link-lib=zstd");
 
     // Also build the utility programs as separate binaries
     // FastGA's system() calls need these
     use std::process::Command;
 
     let utilities = [
-        "FastGA", "FAtoGDB", "GIXmake", "GIXrm", "ALNtoPAF", "PAFtoALN", "ONEview",
+        "FastGA", "FAtoGDB", "GIXmake", "GIXrm", "GIXpack", "ALNtoPAF", "PAFtoALN", "ONEview",
     ];
 
     println!("cargo:warning=Building FastGA utilities...");
