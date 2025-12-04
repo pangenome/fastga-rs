@@ -1093,6 +1093,7 @@ Kmer_Stream *Clone_Kmer_Stream(Kmer_Stream *O)
   if (S->table == NULL || S->name == NULL)
     exit (1);
   strncpy(S->name,STREAM(O)->name,S->nlen);
+  S->name[S->nlen] = '\0';  // Ensure null termination
 
 #ifdef ZSTD_KTAB
   // Clone needs its own compressed state
@@ -1336,14 +1337,33 @@ inline void First_Kmer_Entry(Kmer_Stream *_S)
 
   if (S->cidx != 0)
     { if (S->part != 1)
-        { if (S->part <= S->nthr)
-            close(S->copn);
-          sprintf(S->name+S->nlen,"%d",1);
-          S->copn = open(S->name,O_RDONLY);
+        {
+#ifdef ZSTD_KTAB
+          if (S->compressed)
+            { if (open_compressed_part(S, 1) < 0)
+                { S->csuf = NULL;
+                  return;
+                }
+              S->copn = -1;
+            }
+          else
+#endif
+            { if (S->part <= S->nthr)
+                close(S->copn);
+              sprintf(S->name+S->nlen,"%d",1);
+              S->copn = open(S->name,O_RDONLY);
+            }
           S->part = 1;
         }
-
-      lseek(S->copn,sizeof(int)+sizeof(int64),SEEK_SET);
+      else
+        {
+#ifdef ZSTD_KTAB
+          if (S->compressed)
+            S->zoffset = 0;
+          else
+#endif
+            lseek(S->copn,sizeof(int)+sizeof(int64),SEEK_SET);
+        }
 
       More_Kmer_Stream(S);
       S->cidx = 0;
