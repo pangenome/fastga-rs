@@ -1355,15 +1355,14 @@ inline void First_Kmer_Entry(Kmer_Stream *_S)
             }
           S->part = 1;
         }
-      else
-        {
+
+      // Reset position to beginning of data (skip header)
 #ifdef ZSTD_KTAB
-          if (S->compressed)
-            S->zoffset = 0;
-          else
+      if (S->compressed)
+        S->zoffset = 0;
+      else
 #endif
-            lseek(S->copn,sizeof(int)+sizeof(int64),SEEK_SET);
-        }
+        lseek(S->copn,sizeof(int)+sizeof(int64),SEEK_SET);
 
       More_Kmer_Stream(S);
       S->cidx = 0;
