@@ -1,6 +1,19 @@
 DEST_DIR = ~/bin
 
-CFLAGS = -O3 -Wall -Wextra -Wno-unused-result -fno-strict-aliasing
+# Base compiler flags
+BASE_CFLAGS = -O3 -Wall -Wextra -Wno-unused-result -fno-strict-aliasing
+
+# Detect Homebrew on macOS and add zstd paths
+UNAME_S := $(shell uname -s)
+ifeq ($(UNAME_S),Darwin)
+    HOMEBREW_PREFIX := $(shell brew --prefix 2>/dev/null || echo /opt/homebrew)
+    ZSTD_PREFIX := $(shell brew --prefix zstd 2>/dev/null || echo $(HOMEBREW_PREFIX))
+    CFLAGS = $(BASE_CFLAGS) -I$(ZSTD_PREFIX)/include
+    LDFLAGS = -L$(ZSTD_PREFIX)/lib
+else
+    CFLAGS = $(BASE_CFLAGS)
+    LDFLAGS =
+endif
 
 CC = gcc
 
@@ -33,7 +46,7 @@ GIXmake: GIXmake.c MSDsort.c libfastk.c libfastk.h ONElib.c ONElib.h GDB.c GDB.h
 	$(CC) $(CFLAGS) -DLCPs -o GIXmake GIXmake.c MSDsort.c libfastk.c ONElib.c GDB.c gene_core.c -lpthread -lm -lz
 
 GIXshow: GIXshow.c libfastk.c libfastk.h gene_core.c gene_core.h zstd_seekable.h zstdseek_decompress.c xxhash.c
-	$(CC) $(CFLAGS) -DZSTD_KTAB -o GIXshow GIXshow.c libfastk.c gene_core.c zstdseek_decompress.c xxhash.c -lpthread -lm -lzstd
+	$(CC) $(CFLAGS) -DZSTD_KTAB -o GIXshow GIXshow.c libfastk.c gene_core.c zstdseek_decompress.c xxhash.c $(LDFLAGS) -lpthread -lm -lzstd
 
 GIXrm: GIXrm.c gene_core.c gene_core.h
 	$(CC) $(CFLAGS) -o GIXrm GIXrm.c gene_core.c -lm
@@ -45,10 +58,10 @@ GIXcp: GIXxfer.c GDB.c GDB.h ONElib.c ONElib.h gene_core.c gene_core.h
 	$(CC) $(CFLAGS) -o GIXcp GIXxfer.c GDB.c ONElib.c gene_core.c -lm -lz
 
 GIXpack: GIXpack.c zstd_seekable.h zstdseek_compress.c zstdseek_decompress.c xxhash.c xxhash.h gene_core.c gene_core.h
-	$(CC) $(CFLAGS) -o GIXpack GIXpack.c zstdseek_compress.c zstdseek_decompress.c xxhash.c gene_core.c -lzstd -lm
+	$(CC) $(CFLAGS) -o GIXpack GIXpack.c zstdseek_compress.c zstdseek_decompress.c xxhash.c gene_core.c $(LDFLAGS) -lzstd -lm
 
 FastGA: FastGA.c libfastk.c libfastk.h GDB.c GDB.h RSDsort.c align.c align.h alncode.c alncode.h ONElib.c ONElib.h zstd_seekable.h zstdseek_decompress.c xxhash.c
-	$(CC) $(CFLAGS) -DZSTD_KTAB -o FastGA FastGA.c RSDsort.c libfastk.c align.c GDB.c alncode.c gene_core.c ONElib.c zstdseek_decompress.c xxhash.c -lpthread -lm -lz -lzstd
+	$(CC) $(CFLAGS) -DZSTD_KTAB -o FastGA FastGA.c RSDsort.c libfastk.c align.c GDB.c alncode.c gene_core.c ONElib.c zstdseek_decompress.c xxhash.c $(LDFLAGS) -lpthread -lm -lz -lzstd
 
 FastKS: FastKS.c libfastk.c libfastk.h GDB.c GDB.h RSDsort.c align.c align.h alncode.c alncode.h ONElib.c ONElib.h
 	$(CC) $(CFLAGS) -o FastKS FastKS.c RSDsort.c libfastk.c align.c GDB.c alncode.c gene_core.c ONElib.c -lpthread -lm -lz
