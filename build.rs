@@ -3,6 +3,7 @@
 /// This compiles FastGA's C code and links it directly into our Rust binary.
 use std::env;
 use std::path::PathBuf;
+use std::process::Command;
 
 fn main() {
     println!("cargo:rerun-if-changed=build.rs");
@@ -106,10 +107,24 @@ fn main() {
     println!("cargo:rustc-link-lib=z");
     println!("cargo:rustc-link-lib=zstd");
 
+    // On macOS, add Homebrew library path for zstd
+    #[cfg(target_os = "macos")]
+    {
+        // Try to find zstd via Homebrew
+        if let Ok(output) = Command::new("brew")
+            .args(["--prefix", "zstd"])
+            .output()
+        {
+            if output.status.success() {
+                let prefix = String::from_utf8_lossy(&output.stdout);
+                let lib_path = format!("{}/lib", prefix.trim());
+                println!("cargo:rustc-link-search=native={}", lib_path);
+            }
+        }
+    }
+
     // Also build the utility programs as separate binaries
     // FastGA's system() calls need these
-    use std::process::Command;
-
     let utilities = [
         "FastGA", "FAtoGDB", "GIXmake", "GIXrm", "GIXpack", "ALNtoPAF", "PAFtoALN", "ONEview",
     ];
