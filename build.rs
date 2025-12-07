@@ -111,10 +111,7 @@ fn main() {
     #[cfg(target_os = "macos")]
     {
         // Try to find zstd via Homebrew
-        if let Ok(output) = Command::new("brew")
-            .args(["--prefix", "zstd"])
-            .output()
-        {
+        if let Ok(output) = Command::new("brew").args(["--prefix", "zstd"]).output() {
             if output.status.success() {
                 let prefix = String::from_utf8_lossy(&output.stdout);
                 let lib_path = format!("{}/lib", prefix.trim());
