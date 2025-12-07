@@ -1539,7 +1539,6 @@ static void *old_merge_thread(void *args)
 }
 
 #ifdef DEBUG_MERGE
-#endif
 
 static char dna[4] = { 'a', 'c', 'g', 't' };
 
@@ -1609,6 +1608,8 @@ char *Current_Cachmer(Kmer_Stream *S, uint8 *csuf, char *seq)
 
   return (seq);
 }
+
+#endif
 
 
 static void *new_self_merge_thread(void *args)
@@ -4096,7 +4097,7 @@ static int la_merge(TP *parm)
         ovl_reload(src,bsize);
 
       Write_Aln_Overlap (of, ov);
-      Write_Aln_Trace (of, src->ptr, tsize, trace64);
+      Write_Aln_Trace (of, src->ptr, tsize, trace64, 0);
 
       src->ptr += tsize;
       if (src->ptr >= src->top)
@@ -4607,11 +4608,6 @@ int main(int argc, char *argv[])
       }
 
     // Removed 255 frequency limit to support pangenome workflows with many sequences
-    // Note: Very large FREQ values (>100000) may cause stack overflow in post[] arrays
-    if (FREQ > 1000000)
-      { fprintf(stderr,"%s: Warning: FREQ=%d is very large and may cause stack overflow\n",Prog_Name,FREQ);
-        fprintf(stderr,"%s: Consider using a smaller value unless you have increased stack limits\n",Prog_Name);
-      }
 
     if ((OUT_OPT & PAFM) && (OUT_OPT & PAFX))
       { fprintf(stderr,"%s: Only one of -paf[m] or -paf[x] can be set\n",Prog_Name);
