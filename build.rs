@@ -3,8 +3,8 @@
 /// This compiles FastGA's C code and links it directly into our Rust binary.
 ///
 /// Features:
-/// - `zstd`: Enable zstd compression for ktab index files (requires libzstd >= 1.4.1)
-///           Without this feature, FastGA still works but cannot compress/decompress indices.
+/// - `zstd`: Enable zstd compression for ktab index files (requires libzstd >= 1.4.1).
+///   Without this feature, FastGA still works but cannot compress/decompress indices.
 use std::env;
 use std::path::PathBuf;
 use std::process::Command;
