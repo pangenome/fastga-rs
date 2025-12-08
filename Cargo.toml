@@ -1,6 +1,6 @@
 [package]
 name = "fastga-rs"
-version = "0.1.1"
+version = "0.1.2"
 edition = "2021"
 authors = ["Erik Garrison <erik.garrison@gmail.com>"]
 license = "MIT"
@@ -16,6 +16,11 @@ exclude = [
     "!README.md",
     "!LICENSE",
 ]
+
+[features]
+default = ["zstd"]
+# Enable zstd compression for ktab index files (requires libzstd >= 1.4.1)
+zstd = []
 
 [dependencies]
 thiserror = "1.0"

@@ -1,6 +1,10 @@
 /// Build script for compiling FastGA as a static library.
 ///
 /// This compiles FastGA's C code and links it directly into our Rust binary.
+///
+/// Features:
+/// - `zstd`: Enable zstd compression for ktab index files (requires libzstd >= 1.4.1).
+///   Without this feature, FastGA still works but cannot compress/decompress indices.
 use std::env;
 use std::path::PathBuf;
 use std::process::Command;
@@ -13,8 +17,15 @@ fn main() {
     let manifest_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap());
     let fastga_dir = manifest_dir.join("deps").join("fastga");
 
+    // Check if zstd feature is enabled
+    let zstd_enabled = env::var("CARGO_FEATURE_ZSTD").is_ok();
+
     // Compile FastGA as a static library
-    println!("cargo:warning=Building FastGA as static library...");
+    if zstd_enabled {
+        println!("cargo:warning=Building FastGA with ZSTD support...");
+    } else {
+        println!("cargo:warning=Building FastGA without ZSTD support...");
+    }
 
     // Build our wrapper functions
     // Note: aln_filter_wrapper.c removed - now using onecode-rs for .1aln I/O
@@ -36,7 +47,6 @@ fn main() {
 
     // We need to compile each program separately to avoid redefining main multiple times
     // First compile FastGA with main renamed
-    // Note: With ZSTD_KTAB, FastGA can transparently read compressed .ktab.*.zst files
     let mut fastga_build = cc::Build::new();
     fastga_build
         .file(fastga_dir.join("FastGA.c"))
@@ -44,16 +54,20 @@ fn main() {
         .file(fastga_dir.join("align.c"))
         .file(fastga_dir.join("alncode.c"))
         .file(fastga_dir.join("RSDsort.c"))
-        // zstd seekable decompression support
-        .file(fastga_dir.join("zstdseek_decompress.c"))
-        .file(fastga_dir.join("xxhash.c"))
         .include(&fastga_dir)
         .flag("-O3")
         .flag("-fno-strict-aliasing")
         .warnings(false)
-        .define("_GNU_SOURCE", None)
-        .define("ZSTD_KTAB", None)
-        .compile("fastga_main");
+        .define("_GNU_SOURCE", None);
+
+    // Add zstd support if feature is enabled
+    if zstd_enabled {
+        fastga_build
+            .file(fastga_dir.join("zstdseek_decompress.c"))
+            .file(fastga_dir.join("xxhash.c"))
+            .define("ZSTD_KTAB", None);
+    }
+    fastga_build.compile("fastga_main");
 
     // Compile FAtoGDB with main renamed
     let mut fatogdb_build = cc::Build::new();
@@ -81,7 +95,6 @@ fn main() {
         .compile("gixmake_main");
 
     // Compile common dependencies
-    // Note: With ZSTD_KTAB, libfastk.c can transparently read compressed .ktab.*.zst files
     let mut common_build = cc::Build::new();
     common_build
         .file(fastga_dir.join("GDB.c"))
@@ -90,48 +103,70 @@ fn main() {
         .file(fastga_dir.join("ONElib.c"))
         .file(fastga_dir.join("hash.c"))
         .file(fastga_dir.join("select.c"))
-        // zstd seekable decompression support
-        .file(fastga_dir.join("zstdseek_decompress.c"))
-        .file(fastga_dir.join("xxhash.c"))
         .include(&fastga_dir)
         .flag("-O3")
         .flag("-fno-strict-aliasing")
         .warnings(false)
-        .define("_GNU_SOURCE", None)
-        .define("ZSTD_KTAB", None)
-        .compile("fastga_common");
+        .define("_GNU_SOURCE", None);
+
+    // Add zstd support if feature is enabled
+    if zstd_enabled {
+        common_build
+            .file(fastga_dir.join("zstdseek_decompress.c"))
+            .file(fastga_dir.join("xxhash.c"))
+            .define("ZSTD_KTAB", None);
+    }
+    common_build.compile("fastga_common");
 
     // Link required system libraries
     println!("cargo:rustc-link-lib=pthread");
     println!("cargo:rustc-link-lib=m");
     println!("cargo:rustc-link-lib=z");
-    println!("cargo:rustc-link-lib=zstd");
 
-    // On macOS, add Homebrew library path for zstd
-    #[cfg(target_os = "macos")]
-    {
-        // Try to find zstd via Homebrew
-        if let Ok(output) = Command::new("brew").args(["--prefix", "zstd"]).output() {
-            if output.status.success() {
-                let prefix = String::from_utf8_lossy(&output.stdout);
-                let lib_path = format!("{}/lib", prefix.trim());
-                println!("cargo:rustc-link-search=native={}", lib_path);
+    // Link zstd only if feature is enabled
+    if zstd_enabled {
+        println!("cargo:rustc-link-lib=zstd");
+
+        // On macOS, add Homebrew library path for zstd
+        #[cfg(target_os = "macos")]
+        {
+            // Try to find zstd via Homebrew
+            if let Ok(output) = Command::new("brew").args(["--prefix", "zstd"]).output() {
+                if output.status.success() {
+                    let prefix = String::from_utf8_lossy(&output.stdout);
+                    let lib_path = format!("{}/lib", prefix.trim());
+                    println!("cargo:rustc-link-search=native={}", lib_path);
+                }
             }
         }
     }
 
-    // Also build the utility programs as separate binaries
+    // Build the utility programs as separate binaries
     // FastGA's system() calls need these
-    let utilities = [
-        "FastGA", "FAtoGDB", "GIXmake", "GIXrm", "GIXpack", "ALNtoPAF", "PAFtoALN", "ONEview",
+    // GIXpack requires zstd, so only include it when zstd feature is enabled
+    let base_utilities = [
+        "FastGA", "FAtoGDB", "GIXmake", "GIXrm", "ALNtoPAF", "PAFtoALN", "ONEview",
     ];
 
     println!("cargo:warning=Building FastGA utilities...");
 
-    for utility in &utilities {
-        let status = Command::new("make")
-            .current_dir(&fastga_dir)
-            .arg(utility)
+    // Set ZSTD_KTAB environment variable for make if zstd is enabled
+    let make_env = if zstd_enabled {
+        vec![("ZSTD_KTAB", "1")]
+    } else {
+        vec![]
+    };
+
+    for utility in &base_utilities {
+        let mut cmd = Command::new("make");
+        cmd.current_dir(&fastga_dir).arg(utility);
+
+        // Pass ZSTD_KTAB to make for utilities that support it
+        for (key, val) in &make_env {
+            cmd.env(key, val);
+        }
+
+        let status = cmd
             .status()
             .unwrap_or_else(|_| panic!("Failed to build {utility}"));
 
@@ -157,6 +192,37 @@ fn main() {
 
             // Remove from source directory to avoid cargo publish verification errors
             // (cargo doesn't allow build scripts to modify source directory)
+            let _ = std::fs::remove_file(&src);
+        }
+    }
+
+    // Build GIXpack only if zstd is enabled (it requires zstd for compression)
+    if zstd_enabled {
+        let mut cmd = Command::new("make");
+        cmd.current_dir(&fastga_dir)
+            .arg("GIXpack")
+            .env("ZSTD_KTAB", "1");
+
+        let status = cmd.status().unwrap_or_else(|_| panic!("Failed to build GIXpack"));
+
+        if !status.success() {
+            panic!("Failed to build GIXpack");
+        }
+
+        let src = fastga_dir.join("GIXpack");
+        let dst = out_dir.join("GIXpack");
+        if src.exists() {
+            std::fs::copy(&src, &dst)
+                .unwrap_or_else(|_| panic!("Failed to copy GIXpack to OUT_DIR"));
+
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                let mut perms = std::fs::metadata(&dst).unwrap().permissions();
+                perms.set_mode(0o755);
+                std::fs::set_permissions(&dst, perms).unwrap();
+            }
+
             let _ = std::fs::remove_file(&src);
         }
     }
