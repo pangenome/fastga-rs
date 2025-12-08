@@ -18,7 +18,7 @@ exclude = [
 ]
 
 [features]
-default = []
+default = ["zstd"]
 # Enable zstd compression for ktab index files (requires libzstd >= 1.4.1)
 zstd = []
 
