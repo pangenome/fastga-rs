@@ -6,8 +6,87 @@
 /// - `zstd`: Enable zstd compression for ktab index files (requires libzstd >= 1.4.1).
 ///   Without this feature, FastGA still works but cannot compress/decompress indices.
 use std::env;
+use std::io::{Read, Write};
 use std::path::PathBuf;
 use std::process::Command;
+
+/// Patch ONElib.c to respect TMPDIR environment variable instead of hardcoded /tmp/
+/// This allows FastGA to work on systems where /tmp is not writable or is on a
+/// read-only filesystem (common in HPC environments).
+fn patch_onelib_tmpdir(fastga_dir: &std::path::Path) {
+    let onelib_path = fastga_dir.join("ONElib.c");
+
+    let mut content = String::new();
+    std::fs::File::open(&onelib_path)
+        .expect("Failed to open ONElib.c")
+        .read_to_string(&mut content)
+        .expect("Failed to read ONElib.c");
+
+    // Check if already patched
+    if content.contains("get_tmpdir_path") {
+        return;
+    }
+
+    // Add helper function after the includes section
+    // We insert after "static int listEltSize" which appears early in the file
+    let helper_function = r#"
+
+// Helper function to get temp directory from TMPDIR env var, fallback to /tmp
+// Patched by fastga-rs build script to support HPC environments
+static const char* get_tmpdir_path(void) {
+    const char* tmpdir = getenv("TMPDIR");
+    if (tmpdir && tmpdir[0] != '\0') {
+        return tmpdir;
+    }
+    tmpdir = getenv("TMP");
+    if (tmpdir && tmpdir[0] != '\0') {
+        return tmpdir;
+    }
+    tmpdir = getenv("TEMP");
+    if (tmpdir && tmpdir[0] != '\0') {
+        return tmpdir;
+    }
+    return "/tmp";
+}
+"#;
+
+    // Find insertion point after "static int listEltSize" line
+    let insertion_marker = "static int listEltSize";
+    if let Some(pos) = content.find(insertion_marker) {
+        if let Some(newline_pos) = content[pos..].find('\n') {
+            let insert_pos = pos + newline_pos + 1;
+            content.insert_str(insert_pos, helper_function);
+        }
+    }
+
+    // Replace hardcoded /tmp/ paths with dynamic temp directory
+    // Pattern 1: sprintf (template, "/tmp/OneSchema.%d", getpid()) ;
+    content = content.replace(
+        r#"sprintf (template, "/tmp/OneSchema.%d", getpid())"#,
+        r#"sprintf (template, "%s/OneSchema.%d", get_tmpdir_path(), getpid())"#,
+    );
+
+    // Pattern 2: strcpy (template, "/tmp/OneSchema.XXXXXX") ;
+    content = content.replace(
+        r#"strcpy (template, "/tmp/OneSchema.XXXXXX")"#,
+        r#"sprintf (template, "%s/OneSchema.XXXXXX", get_tmpdir_path())"#,
+    );
+
+    // Pattern 3: char template[] = "/tmp/OneTextSchema-XXXXXX" ;
+    // Need to change fixed-size array to larger buffer for sprintf
+    content = content.replace(
+        r#"char template[] = "/tmp/OneTextSchema-XXXXXX""#,
+        r#"char template[4096]; sprintf(template, "%s/OneTextSchema-XXXXXX", get_tmpdir_path())"#,
+    );
+
+    // Write patched content back
+    std::fs::File::create(&onelib_path)
+        .expect("Failed to create patched ONElib.c")
+        .write_all(content.as_bytes())
+        .expect("Failed to write patched ONElib.c");
+
+    println!("cargo:warning=Patched ONElib.c to respect TMPDIR environment variable");
+}
 
 fn main() {
     println!("cargo:rerun-if-changed=build.rs");
@@ -16,6 +95,10 @@ fn main() {
     let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap());
     let manifest_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap());
     let fastga_dir = manifest_dir.join("deps").join("fastga");
+
+    // Patch ONElib.c to respect TMPDIR before any compilation
+    // This must happen before both cc::Build and make commands
+    patch_onelib_tmpdir(&fastga_dir);
 
     // Check if zstd feature is enabled
     let zstd_enabled = env::var("CARGO_FEATURE_ZSTD").is_ok();

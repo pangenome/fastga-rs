@@ -111,6 +111,8 @@ impl FastGAOrchestrator {
 
         // Build command first so we can log actual args
         let mut cmd = std::process::Command::new(&fastga_bin);
+        // Set TMPDIR for ONEcode's internal temp files (OneTextSchema, etc.)
+        cmd.env("TMPDIR", &self.temp_dir);
         cmd.arg(format!("-1:{}", temp_aln_rel.to_string_lossy()))
             .arg(format!("-T{}", self.num_threads));
 
@@ -139,10 +141,11 @@ impl FastGAOrchestrator {
             .map(|s| s.to_string_lossy().to_string())
             .collect();
         eprintln!(
-            "[FastGA] Calling FastGA: {} {} (in dir: {})",
+            "[FastGA] Calling FastGA: {} {} (in dir: {}, TMPDIR={})",
             fastga_bin.display(),
             args_str.join(" "),
-            working_dir.display()
+            working_dir.display(),
+            self.temp_dir
         );
 
         let output = cmd
@@ -202,12 +205,14 @@ impl FastGAOrchestrator {
         let fatogdb_bin = find_binary("FAtoGDB")?;
 
         eprintln!(
-            "[FastGA] Calling FAtoGDB: {} {}",
+            "[FastGA] Calling FAtoGDB: {} {} (TMPDIR={})",
             fatogdb_bin.display(),
-            fasta_path.display()
+            fasta_path.display(),
+            self.temp_dir
         );
 
         let output = std::process::Command::new(&fatogdb_bin)
+            .env("TMPDIR", &self.temp_dir)
             .arg(fasta_path)
             .output()
             .map_err(|e| FastGAError::Other(format!("Failed to run FAtoGDB: {e}")))?;
@@ -251,6 +256,7 @@ impl FastGAOrchestrator {
         );
 
         let output = std::process::Command::new(&gixmake_bin)
+            .env("TMPDIR", &self.temp_dir)
             .arg(format!("-T{}", self.num_threads))
             .arg(format!("-P{}", self.temp_dir))
             .arg(gdb_path)
@@ -302,6 +308,8 @@ impl FastGAOrchestrator {
 
         // Build command first so we can log actual args
         let mut cmd = std::process::Command::new(&fastga_bin);
+        // Set TMPDIR for ONEcode's internal temp files (OneTextSchema, etc.)
+        cmd.env("TMPDIR", &self.temp_dir);
         cmd.arg(format!("-1:{}", temp_aln_rel.to_string_lossy()))
             .arg(format!("-T{}", self.num_threads));
 
@@ -330,10 +338,11 @@ impl FastGAOrchestrator {
             .map(|s| s.to_string_lossy().to_string())
             .collect();
         eprintln!(
-            "[FastGA] Calling FastGA: {} {} (in dir: {})",
+            "[FastGA] Calling FastGA: {} {} (in dir: {}, TMPDIR={})",
             fastga_bin.display(),
             args_str.join(" "),
-            working_dir.display()
+            working_dir.display(),
+            self.temp_dir
         );
 
         let output = cmd
@@ -358,6 +367,7 @@ impl FastGAOrchestrator {
         // Now convert .1aln to PAF using ALNtoPAF
         // Using -x flag for extended CIGAR with X/= operators (works with FastGA 1789f15)
         let paf_output = std::process::Command::new(&alnto_paf_bin)
+            .env("TMPDIR", &self.temp_dir)
             .arg("-x")
             .arg(temp_aln_rel)
             .current_dir(working_dir)
