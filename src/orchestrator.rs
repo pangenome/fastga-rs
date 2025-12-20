@@ -7,6 +7,16 @@ use crate::binary_finder::find_binary;
 use crate::error::{FastGAError, Result};
 use std::os::raw::{c_char, c_int};
 use std::path::Path;
+use std::sync::atomic::{AtomicU64, Ordering};
+
+/// Global counter for generating unique temp file names
+static TEMP_FILE_COUNTER: AtomicU64 = AtomicU64::new(0);
+
+/// Generate a unique temp file name combining PID and atomic counter
+fn unique_temp_name() -> String {
+    let count = TEMP_FILE_COUNTER.fetch_add(1, Ordering::SeqCst);
+    format!("_tmp_{}_{}", std::process::id(), count)
+}
 
 // FFI bindings only for the core alignment function
 #[link(name = "fastga_main", kind = "static")]
@@ -105,8 +115,8 @@ impl FastGAOrchestrator {
             .file_name()
             .ok_or_else(|| FastGAError::Other("Cannot determine target filename".to_string()))?;
 
-        // Create temporary .1aln file
-        let temp_aln = working_dir.join(format!("_tmp_{}.1aln", std::process::id()));
+        // Create temporary .1aln file with unique name (PID + counter)
+        let temp_aln = working_dir.join(format!("{}.1aln", unique_temp_name()));
         let temp_aln_rel = temp_aln.file_name().unwrap();
 
         // Build command first so we can log actual args
@@ -302,8 +312,8 @@ impl FastGAOrchestrator {
             .file_name()
             .ok_or_else(|| FastGAError::Other("Cannot determine target filename".to_string()))?;
 
-        // Create temporary .1aln file
-        let temp_aln = working_dir.join(format!("_tmp_{}.1aln", std::process::id()));
+        // Create temporary .1aln file with unique name (PID + counter)
+        let temp_aln = working_dir.join(format!("{}.1aln", unique_temp_name()));
         let temp_aln_rel = temp_aln.file_name().unwrap();
 
         // Build command first so we can log actual args
