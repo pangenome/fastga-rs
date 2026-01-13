@@ -17,11 +17,6 @@ exclude = [
     "!LICENSE",
 ]
 
-[features]
-default = ["zstd"]
-# Enable zstd compression for ktab index files (requires libzstd >= 1.4.1)
-zstd = []
-
 [dependencies]
 thiserror = "1.0"
 anyhow = "1.0"

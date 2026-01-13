@@ -1,23 +1,10 @@
 DEST_DIR = ~/bin
 
-# Base compiler flags
-BASE_CFLAGS = -O3 -Wall -Wextra -Wno-unused-result -fno-strict-aliasing
-
-# Detect Homebrew on macOS and add zstd paths
-UNAME_S := $(shell uname -s)
-ifeq ($(UNAME_S),Darwin)
-    HOMEBREW_PREFIX := $(shell brew --prefix 2>/dev/null || echo /opt/homebrew)
-    ZSTD_PREFIX := $(shell brew --prefix zstd 2>/dev/null || echo $(HOMEBREW_PREFIX))
-    CFLAGS = $(BASE_CFLAGS) -I$(ZSTD_PREFIX)/include
-    LDFLAGS = -L$(ZSTD_PREFIX)/lib
-else
-    CFLAGS = $(BASE_CFLAGS)
-    LDFLAGS =
-endif
+CFLAGS = -O3 -Wall -Wextra -Wno-unused-result -fno-strict-aliasing
 
 CC = gcc
 
-ALL = FAtoGDB GDBtoFA GDBstat GDBshow GIXmake GIXshow GIXrm GIXmv GIXcp GIXpack FastGA ALNshow ALNtoPAF ALNtoPSL ALNreset ALNplot ALNchain PAFtoALN PAFtoPSL ONEview FastKS ONEalnTEST # FastGAN
+ALL = FAtoGDB GDBtoFA GDBstat GDBshow GIXmake GIXshow GIXrm GIXmv GIXcp FastGA ALNshow ALNtoPAF ALNtoPSL ALNreset ALNplot ALNchain PAFtoALN PAFtoPSL ONEview FastKS ONEalnTEST ANOstat ANOshow ANOtoBED BEDtoANO # ALNfill FastGAN 
 
 all: $(ALL)
 
@@ -27,26 +14,29 @@ libfastk.h: gene_core.h
 GDB.c: gene_core.c gene_core.h
 GDB.h: gene_core.h
 
-FastGAN: FastGA.c libfastk.c libfastk.h GDB.c GDB.h RSDsort.c align.c align.h alncode.c alncode.h ONElib.c ONElib.h
-	$(CC) $(CFLAGS) -o FastGAN FastGA.c RSDsort.c libfastk.c align.c GDB.c alncode.c gene_core.c ONElib.c -lpthread -lm -lz
+FastGAN: FastGA.new.c libfastk.c libfastk.h GDB.c GDB.h RSDsort.c align.c align.h alncode.c alncode.h ONElib.c ONElib.h
+	$(CC) $(CFLAGS) -o FastGAN FastGA.new.c RSDsort.c libfastk.c align.c GDB.c alncode.c gene_core.c ONElib.c -lpthread -lm -lz
 
-FAtoGDB: FAtoGDB.c GDB.c GDB.h ONElib.c ONElib.h
-	$(CC) $(CFLAGS) -o FAtoGDB FAtoGDB.c GDB.c gene_core.c ONElib.c -lm -lz
+ALNfill: ALNfill.c align.h align.c GDB.c GDB.h alncode.c alncode.h ONElib.c ONElib.h
+	$(CC) $(CFLAGS) -o ALNfill ALNfill.c align.c GDB.c alncode.c gene_core.c ONElib.c -lpthread -lm -lz
 
-GDBtoFA: GDBtoFA.c GDB.c GDB.h ONElib.c ONElib.h
-	$(CC) $(CFLAGS) -o GDBtoFA GDBtoFA.c GDB.c gene_core.c ONElib.c -lm -lz
+FAtoGDB: FAtoGDB.c GDB.c GDB.h ANO.c ANO.h ONElib.c ONElib.h
+	$(CC) $(CFLAGS) -o FAtoGDB FAtoGDB.c GDB.c ANO.c gene_core.c ONElib.c -lm -lz
+
+GDBtoFA: GDBtoFA.c GDB.c GDB.h ANO.c ANO.h ONElib.c ONElib.h
+	$(CC) $(CFLAGS) -o GDBtoFA GDBtoFA.c GDB.c ANO.c gene_core.c ONElib.c -lm -lz
 
 GDBstat: GDBstat.c GDB.c GDB.h ONElib.c ONElib.h
 	$(CC) $(CFLAGS) -o GDBstat GDBstat.c GDB.c gene_core.c ONElib.c -lpthread -lm -lz
 
-GDBshow: GDBshow.c GDB.h GDB.c select.c select.h hash.c hash.h ONElib.c ONElib.h
-	$(CC) $(CFLAGS) -o GDBshow GDBshow.c ONElib.c GDB.c select.c hash.c gene_core.c -lpthread -lm -lz
+GDBshow: GDBshow.c GDB.h GDB.c ANO.h ANO.c select.c select.h hash.c hash.h ONElib.c ONElib.h
+	$(CC) $(CFLAGS) -o GDBshow GDBshow.c ONElib.c ANO.c GDB.c select.c hash.c gene_core.c -lpthread -lm -lz
 
-GIXmake: GIXmake.c MSDsort.c libfastk.c libfastk.h ONElib.c ONElib.h GDB.c GDB.h
-	$(CC) $(CFLAGS) -DLCPs -o GIXmake GIXmake.c MSDsort.c libfastk.c ONElib.c GDB.c gene_core.c -lpthread -lm -lz
+GIXmake: GIXmake.c MSDsort.c libfastk.c libfastk.h ONElib.c ONElib.h ANO.c ANO.h GDB.c GDB.h
+	$(CC) $(CFLAGS) -DLCPs -o GIXmake GIXmake.c MSDsort.c libfastk.c ONElib.c ANO.c GDB.c gene_core.c -lpthread -lm -lz
 
-GIXshow: GIXshow.c libfastk.c libfastk.h gene_core.c gene_core.h zstd_seekable.h zstdseek_decompress.c xxhash.c
-	$(CC) $(CFLAGS) -DZSTD_KTAB -o GIXshow GIXshow.c libfastk.c gene_core.c zstdseek_decompress.c xxhash.c $(LDFLAGS) -lpthread -lm -lzstd
+GIXshow: GIXshow.c libfastk.c libfastk.h gene_core.c gene_core.h
+	$(CC) $(CFLAGS) -o GIXshow GIXshow.c libfastk.c gene_core.c -lpthread -lm
 
 GIXrm: GIXrm.c gene_core.c gene_core.h
 	$(CC) $(CFLAGS) -o GIXrm GIXrm.c gene_core.c -lm
@@ -57,11 +47,8 @@ GIXmv: GIXxfer.c GDB.c GDB.h gene_core.c ONElib.c ONElib.h gene_core.h
 GIXcp: GIXxfer.c GDB.c GDB.h ONElib.c ONElib.h gene_core.c gene_core.h
 	$(CC) $(CFLAGS) -o GIXcp GIXxfer.c GDB.c ONElib.c gene_core.c -lm -lz
 
-GIXpack: GIXpack.c zstd_seekable.h zstdseek_compress.c zstdseek_decompress.c xxhash.c xxhash.h gene_core.c gene_core.h
-	$(CC) $(CFLAGS) -o GIXpack GIXpack.c zstdseek_compress.c zstdseek_decompress.c xxhash.c gene_core.c $(LDFLAGS) -lzstd -lm
-
-FastGA: FastGA.c libfastk.c libfastk.h GDB.c GDB.h RSDsort.c align.c align.h alncode.c alncode.h ONElib.c ONElib.h zstd_seekable.h zstdseek_decompress.c xxhash.c
-	$(CC) $(CFLAGS) -DZSTD_KTAB -o FastGA FastGA.c RSDsort.c libfastk.c align.c GDB.c alncode.c gene_core.c ONElib.c zstdseek_decompress.c xxhash.c $(LDFLAGS) -lpthread -lm -lz -lzstd
+FastGA: FastGA.c libfastk.c libfastk.h GDB.c GDB.h RSDsort.c align.c align.h alncode.c alncode.h ONElib.c ONElib.h
+	$(CC) $(CFLAGS) -o FastGA FastGA.c RSDsort.c libfastk.c align.c GDB.c alncode.c gene_core.c ONElib.c -lpthread -lm -lz
 
 FastKS: FastKS.c libfastk.c libfastk.h GDB.c GDB.h RSDsort.c align.c align.h alncode.c alncode.h ONElib.c ONElib.h
 	$(CC) $(CFLAGS) -o FastKS FastKS.c RSDsort.c libfastk.c align.c GDB.c alncode.c gene_core.c ONElib.c -lpthread -lm -lz
@@ -95,6 +82,18 @@ ONEview: ONEview.c ONElib.c ONElib.h
 
 ONEalnTEST: ONEaln.c ONEaln.h GDB.c GDB.h ONElib.c ONElib.h align.c align.h alncode.c alncode.h
 	$(CC) $(CFLAGS) -DTEST -o ONEalnTEST ONEaln.c GDB.c alncode.c align.c gene_core.c ONElib.c -lm -lz
+
+ANOstat: ANOstat.c ANO.c ANO.h GDB.c GDB.h ONElib.c ONElib.h
+	$(CC) $(CFLAGS) -o ANOstat ANOstat.c ANO.c GDB.c gene_core.c ONElib.c -lpthread -lm -lz
+
+ANOshow: ANOshow.c GDB.h GDB.c ANO.h ANO.c select.c select.h hash.c hash.h ONElib.c ONElib.h
+	$(CC) $(CFLAGS) -o ANOshow ANOshow.c ONElib.c ANO.c GDB.c select.c hash.c gene_core.c -lpthread -lm -lz
+
+ANOtoBED: ANOtoBED.c GDB.c GDB.h ANO.c ANO.h ONElib.c ONElib.h
+	$(CC) $(CFLAGS) -o ANOtoBED ANOtoBED.c GDB.c ANO.c gene_core.c ONElib.c -lm -lz
+
+BEDtoANO: BEDtoANO.c hash.c hash.h GDB.c GDB.h ANO.c ANO.h ONElib.c ONElib.h
+	$(CC) $(CFLAGS) -o BEDtoANO BEDtoANO.c hash.c GDB.c ANO.c gene_core.c ONElib.c -lm -lz
 
 clean:
 	rm -f $(ALL)

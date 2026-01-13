@@ -149,6 +149,25 @@ static void schemaAddGroup (OneSchema *vs, char t)
 
 static int listEltSize[9] = { 0, 0, 0, 0, 1, sizeof(I64), sizeof(double), 1, 1 } ;
 
+
+// Helper function to get temp directory from TMPDIR env var, fallback to /tmp
+// Patched by fastga-rs build script to support HPC environments
+static const char* get_tmpdir_path(void) {
+    const char* tmpdir = getenv("TMPDIR");
+    if (tmpdir && tmpdir[0] != '\0') {
+        return tmpdir;
+    }
+    tmpdir = getenv("TMP");
+    if (tmpdir && tmpdir[0] != '\0') {
+        return tmpdir;
+    }
+    tmpdir = getenv("TEMP");
+    if (tmpdir && tmpdir[0] != '\0') {
+        return tmpdir;
+    }
+    return "/tmp";
+}
+
 static void schemaAddInfoFromArray (OneSchema *vs, int n, OneType *a, char t, char type)
 {
   // use during the bootstrap, while parsing schema files, and while parsing ~ lines in other files
@@ -306,11 +325,11 @@ OneSchema *oneSchemaCreateFromFile (const char *filename)
     char template[64] ;
 // #define VALGRIND_MACOS
 #ifdef VALGRIND_MACOS // MacOS valgrind is missing functions to make temp files it seems
-    sprintf (template, "/tmp/OneSchema.%d", getpid()) ;
+    sprintf (template, "%s/OneSchema.%d", get_tmpdir_path(), getpid()) ;
     vf->f = fopen (template, "w+") ;
     if (errno) die ("failed to open temporary file %s errno %d\n", template, errno) ;
 #else
-    strcpy (template, "/tmp/OneSchema.XXXXXX") ;
+    sprintf (template, "%s/OneSchema.XXXXXX", get_tmpdir_path()) ;
     int fd = mkstemp (template) ;
     if (errno) die ("failed to open temporary file %s errno %d\n", template, errno) ;
     vf->f = fdopen (fd, "w+") ;
@@ -393,7 +412,7 @@ OneSchema *oneSchemaCreateFromText (const char *text) // write to temp file and 
   // static char template[64] ;
   // sprintf (template, "/tmp/OneTextSchema-%d.schema", getpid()) ;
   
-  char template[] = "/tmp/OneTextSchema-XXXXXX" ;
+  char template[4096]; sprintf(template, "%s/OneTextSchema-XXXXXX", get_tmpdir_path()) ;
   errno = 0 ;
   int fd = mkstemp(template) ;
   if (fd == -1) die ("failed to make temporary file %s for writing schema to - errno %d", template, errno) ;
@@ -1375,7 +1394,7 @@ OneFile *oneFileOpenRead (const char *path, OneSchema *vsArg, const char *fileTy
 	  }
 	if (!f) return 0 ;
       }
-    
+
 #define OPEN_ERROR1(x) \
     { snprintf (errorString, 1024, "ONEcode file open error %s: %s\n", localPath, x) ; \
       fclose(f) ; if (localPath != path) free(localPath) ; return NULL; }
@@ -1671,7 +1690,7 @@ OneFile *oneFileOpenRead (const char *path, OneSchema *vsArg, const char *fileTy
 
   if (!isBareFile)
     oneSchemaDestroy (vs0) ;
-    
+
   if (localPath != path) free(localPath) ; 
   return vf;
 }
@@ -2806,7 +2825,7 @@ void oneFileClose (OneFile *vf)
 
   if (vf->isWrite)
     oneFinalize (vf) ;
-  
+
   oneFileDestroy (vf);
 }
 

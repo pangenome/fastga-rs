@@ -10,11 +10,6 @@
 #include "libfastk.h"
 #include "gene_core.h"
 
-#ifdef ZSTD_KTAB
-#include "zstd.h"
-#include "zstd_seekable.h"
-#endif
-
 /*********************************************************************************************\
  *
  *  HISTOGRAM CODE
@@ -746,108 +741,11 @@ typedef struct
     uint8 *ctop;       //  Ptr top of current table block in buffer
     int64 *neps;       //  Size of each thread part in elements
     int    clone;      //  Is this a clone?
-#ifdef ZSTD_KTAB
-    int    compressed; //  1 if using compressed ktab files
-    void  *zseek;      //  ZSTD_seekable* for current part
-    void  *zdata;      //  Compressed data buffer for current part
-    size_t zdatasize;  //  Size of compressed data buffer
-    int64  zoffset;    //  Current decompressed offset within part
-#endif
   } _Kmer_Stream;
 
 #define STREAM(S) ((_Kmer_Stream *) S)
 
 #define STREAM_BLOCK 0x20000
-
-#ifdef ZSTD_KTAB
-// Open a compressed ktab part file and initialize seekable decompression
-static int open_compressed_part(_Kmer_Stream *S, int part)
-{ char zpath[2048];
-  FILE *zf;
-  long fsize;
-  size_t ret;
-  ZSTD_seekable *zs;
-
-  // Free previous compressed state if any
-  if (S->zseek != NULL)
-    { ZSTD_seekable_free((ZSTD_seekable *)S->zseek);
-      S->zseek = NULL;
-    }
-  if (S->zdata != NULL)
-    { free(S->zdata);
-      S->zdata = NULL;
-    }
-
-  // Build path to compressed file
-  sprintf(zpath, "%s%d.zst", S->name, part);
-
-  // Open and read compressed file into memory
-  zf = fopen(zpath, "rb");
-  if (zf == NULL)
-    return -1;
-
-  // Skip 12-byte header (kmer + nels), it's stored uncompressed
-  fseek(zf, 12, SEEK_SET);
-
-  // Get compressed data size
-  fseek(zf, 0, SEEK_END);
-  fsize = ftell(zf);
-  S->zdatasize = fsize - 12;
-  fseek(zf, 12, SEEK_SET);
-
-  // Allocate and read compressed data
-  S->zdata = Malloc(S->zdatasize, "Compressed data buffer");
-  if (S->zdata == NULL)
-    { fclose(zf);
-      return -1;
-    }
-  if (fread(S->zdata, 1, S->zdatasize, zf) != S->zdatasize)
-    { free(S->zdata);
-      S->zdata = NULL;
-      fclose(zf);
-      return -1;
-    }
-  fclose(zf);
-
-  // Initialize seekable decompressor
-  zs = ZSTD_seekable_create();
-  if (zs == NULL)
-    { free(S->zdata);
-      S->zdata = NULL;
-      return -1;
-    }
-
-  ret = ZSTD_seekable_initBuff(zs, S->zdata, S->zdatasize);
-  if (ZSTD_isError(ret))
-    { ZSTD_seekable_free(zs);
-      free(S->zdata);
-      S->zdata = NULL;
-      return -1;
-    }
-
-  S->zseek = zs;
-  S->zoffset = 0;
-  return 0;
-}
-
-// Read from compressed stream at current offset
-static size_t read_compressed(_Kmer_Stream *S, void *buf, size_t size)
-{ ZSTD_seekable *zs = (ZSTD_seekable *)S->zseek;
-  size_t ret;
-
-  ret = ZSTD_seekable_decompress(zs, buf, size, S->zoffset);
-  if (ZSTD_isError(ret))
-    return 0;
-  S->zoffset += ret;
-  return ret;
-}
-
-// Seek in compressed stream (decompressed offset)
-static int seek_compressed(_Kmer_Stream *S, int64 offset)
-{ S->zoffset = offset;
-  return 0;
-}
-#endif
 
 /****************************************************************************************
  *
@@ -862,46 +760,22 @@ static void More_Kmer_Stream(_Kmer_Stream *S)
   uint8 *table = S->table;
   int    copn  = S->copn;
   uint8 *ctop;
-  size_t nread;
 
   if (S->part > S->nthr)
     return;
   while (1)
-    {
-#ifdef ZSTD_KTAB
-      if (S->compressed)
-        nread = read_compressed(S, table, STREAM_BLOCK*pbyte);
-      else
-#endif
-        nread = read(copn, table, STREAM_BLOCK*pbyte);
-      ctop = table + nread;
+    { ctop = table + read(copn,table,STREAM_BLOCK*pbyte);
       if (ctop > table)
         break;
-#ifdef ZSTD_KTAB
-      if (S->compressed)
-        { // Close current compressed part (freed in open_compressed_part)
-        }
-      else
-#endif
-        close(copn);
+      close(copn);
       S->part += 1;
       if (S->part > S->nthr)
         { S->csuf = NULL;
           return;
         }
-#ifdef ZSTD_KTAB
-      if (S->compressed)
-        { if (open_compressed_part(S, S->part) < 0)
-            { S->csuf = NULL;
-              return;
-            }
-        }
-      else
-#endif
-        { sprintf(S->name+S->nlen,"%d",S->part);
-          copn = open(S->name,O_RDONLY);
-          lseek(copn,sizeof(int)+sizeof(int64),SEEK_SET);
-        }
+      sprintf(S->name+S->nlen,"%d",S->part);
+      copn = open(S->name,O_RDONLY);
+      lseek(copn,sizeof(int)+sizeof(int64),SEEK_SET);
     }
   S->csuf = table;
   S->ctop = ctop;
@@ -961,66 +835,31 @@ Kmer_Stream *Open_Kmer_Stream(char *name, int csize)
   if (S == NULL || S->table == NULL || S->neps == NULL || S->index == NULL)
     exit (1);
 
-#ifdef ZSTD_KTAB
-  S->compressed = 0;
-  S->zseek = NULL;
-  S->zdata = NULL;
-  S->zdatasize = 0;
-  S->zoffset = 0;
-#endif
-
   //  Read in index from stub and then close it
 
   read(f,S->index,ixlen*sizeof(int64));
   close(f);
 
-  //  Check if compressed ktab files exist
-#ifdef ZSTD_KTAB
-  { char zpath[2048];
-    sprintf(zpath, "%s1.zst", S->name);
-    if (access(zpath, R_OK) == 0)
-      S->compressed = 1;
-  }
-#endif
-
-  //  Read header of each part accumulating # of elements
+  //  Read header of each part aaccumulating # of elements
 
   nels = 0;
   for (p = 1; p <= nthreads; p++)
-    {
-#ifdef ZSTD_KTAB
-      if (S->compressed)
-        { char zpath[2048];
-          FILE *zf;
-          sprintf(zpath, "%s%d.zst", S->name, p);
-          zf = fopen(zpath, "rb");
-          if (zf == NULL)
-            { fprintf(stderr,"%s: Compressed table part %s is missing ?\n",Prog_Name,zpath);
-              exit (1);
-            }
-          fread(&kmer,sizeof(int),1,zf);
-          fread(&n,sizeof(int64),1,zf);
-          fclose(zf);
+    { sprintf(S->name+S->nlen,"%d",p);
+      copn = open(S->name,O_RDONLY);
+      if (copn < 0)
+        { fprintf(stderr,"%s: Table part %s is missing ?\n",Prog_Name,S->name);
+          exit (1);
         }
-      else
-#endif
-        { sprintf(S->name+S->nlen,"%d",p);
-          copn = open(S->name,O_RDONLY);
-          if (copn < 0)
-            { fprintf(stderr,"%s: Table part %s is missing ?\n",Prog_Name,S->name);
-              exit (1);
-            }
-          read(copn,&kmer,sizeof(int));
-          read(copn,&n,sizeof(int64));
-          close(copn);
-        }
+      read(copn,&kmer,sizeof(int));
+      read(copn,&n,sizeof(int64));
       nels += n;
       S->neps[p-1] = nels;
       if (kmer != smer)
-        { fprintf(stderr,"%s: Table part %d does not have k-mer length matching stub ?\n",
-                         Prog_Name,p);
+        { fprintf(stderr,"%s: Table part %s does not have k-mer length matching stub ?\n",
+                         Prog_Name,S->name);
           exit (1);
         }
+      close(copn);
     }
 
   //  Create inverse index and set all object parameters
@@ -1042,22 +881,12 @@ Kmer_Stream *Open_Kmer_Stream(char *name, int csize)
 
   //  Set position to beginning
 
+  sprintf(S->name+S->nlen,"%d",1);
+  copn = open(S->name,O_RDONLY);
+  lseek(copn,sizeof(int)+sizeof(int64),SEEK_SET);
+
+  S->copn  = copn;
   S->part  = 1;
-#ifdef ZSTD_KTAB
-  if (S->compressed)
-    { if (open_compressed_part(S, 1) < 0)
-        { fprintf(stderr,"%s: Cannot open compressed table part 1\n",Prog_Name);
-          exit (1);
-        }
-      S->copn = -1;  // Not using file descriptor for compressed
-    }
-  else
-#endif
-    { sprintf(S->name+S->nlen,"%d",1);
-      copn = open(S->name,O_RDONLY);
-      lseek(copn,sizeof(int)+sizeof(int64),SEEK_SET);
-      S->copn = copn;
-    }
 
   More_Kmer_Stream(S);
 
@@ -1093,34 +922,15 @@ Kmer_Stream *Clone_Kmer_Stream(Kmer_Stream *O)
   if (S->table == NULL || S->name == NULL)
     exit (1);
   strncpy(S->name,STREAM(O)->name,S->nlen);
-  S->name[S->nlen] = '\0';  // Ensure null termination
-
-#ifdef ZSTD_KTAB
-  // Clone needs its own compressed state
-  S->zseek = NULL;
-  S->zdata = NULL;
-  S->zdatasize = 0;
-  S->zoffset = 0;
-#endif
 
   //  Set position to beginning
 
+  sprintf(S->name+S->nlen,"%d",1);
+  copn = open(S->name,O_RDONLY);
+  lseek(copn,sizeof(int)+sizeof(int64),SEEK_SET);
+
+  S->copn  = copn;
   S->part  = 1;
-#ifdef ZSTD_KTAB
-  if (S->compressed)
-    { if (open_compressed_part(S, 1) < 0)
-        { fprintf(stderr,"%s: Cannot open compressed table part 1 for clone\n",Prog_Name);
-          exit (1);
-        }
-      S->copn = -1;
-    }
-  else
-#endif
-    { sprintf(S->name+S->nlen,"%d",1);
-      copn = open(S->name,O_RDONLY);
-      lseek(copn,sizeof(int)+sizeof(int64),SEEK_SET);
-      S->copn = copn;
-    }
 
   More_Kmer_Stream(S);
   S->cidx  = 0;
@@ -1149,17 +959,8 @@ void Free_Kmer_Stream(Kmer_Stream *_S)
     }
   free(S->name);
   free(S->table);
-#ifdef ZSTD_KTAB
-  if (S->compressed)
-    { if (S->zseek != NULL)
-        ZSTD_seekable_free((ZSTD_seekable *)S->zseek);
-      if (S->zdata != NULL)
-        free(S->zdata);
-    }
-  else
-#endif
-    if (S->copn >= 0)
-      close(S->copn);
+  if (S->copn >= 0)
+    close(S->copn);
   free(S);
 }
 
@@ -1337,32 +1138,14 @@ inline void First_Kmer_Entry(Kmer_Stream *_S)
 
   if (S->cidx != 0)
     { if (S->part != 1)
-        {
-#ifdef ZSTD_KTAB
-          if (S->compressed)
-            { if (open_compressed_part(S, 1) < 0)
-                { S->csuf = NULL;
-                  return;
-                }
-              S->copn = -1;
-            }
-          else
-#endif
-            { if (S->part <= S->nthr)
-                close(S->copn);
-              sprintf(S->name+S->nlen,"%d",1);
-              S->copn = open(S->name,O_RDONLY);
-            }
+        { if (S->part <= S->nthr)
+            close(S->copn);
+          sprintf(S->name+S->nlen,"%d",1);
+          S->copn = open(S->name,O_RDONLY);
           S->part = 1;
         }
 
-      // Reset position to beginning of data (skip header)
-#ifdef ZSTD_KTAB
-      if (S->compressed)
-        S->zoffset = 0;
-      else
-#endif
-        lseek(S->copn,sizeof(int)+sizeof(int64),SEEK_SET);
+      lseek(S->copn,sizeof(int)+sizeof(int64),SEEK_SET);
 
       More_Kmer_Stream(S);
       S->cidx = 0;
@@ -1517,31 +1300,14 @@ inline void GoTo_Kmer_Index(Kmer_Stream *_S, int64 i)
   p += 1;
 
   if (S->part != p)
-    {
-#ifdef ZSTD_KTAB
-      if (S->compressed)
-        { // open_compressed_part handles freeing previous state
-          if (open_compressed_part(S, p) < 0)
-            { S->csuf = NULL;
-              return;
-            }
-        }
-      else
-#endif
-        { if (S->part <= S->nthr)
-            close(S->copn);
-          sprintf(S->name+S->nlen,"%d",p);
-          S->copn = open(S->name,O_RDONLY);
-        }
+    { if (S->part <= S->nthr)
+        close(S->copn);
+      sprintf(S->name+S->nlen,"%d",p);
+      S->copn = open(S->name,O_RDONLY);
       S->part = p;
     }
 
-#ifdef ZSTD_KTAB
-  if (S->compressed)
-    seek_compressed(S, i*S->pbyte);
-  else
-#endif
-    lseek(S->copn,sizeof(int) + sizeof(int64) + i*S->pbyte,SEEK_SET);
+  lseek(S->copn,sizeof(int) + sizeof(int64) + i*S->pbyte,SEEK_SET);
 
   More_Kmer_Stream(S);
 }
@@ -1579,12 +1345,8 @@ int GoTo_Kmer_Entry(Kmer_Stream *_S, uint8 *entry)
   else
     l = index[m-1];
   if (l >= S->nels)
-    {
-#ifdef ZSTD_KTAB
-      if (!S->compressed)
-#endif
-        if (S->part <= S->nthr)
-          close(S->copn);
+    { if (S->part <= S->nthr)
+        close(S->copn);
       S->csuf = NULL;
       S->cidx = S->nels;
       S->cpre = S->ixlen;
@@ -1598,11 +1360,8 @@ int GoTo_Kmer_Entry(Kmer_Stream *_S, uint8 *entry)
     }
   S->cpre = m;
 
-#ifdef ZSTD_KTAB
-  if (!S->compressed)
-#endif
-    if (S->part <= S->nthr)
-      close(S->copn);
+  if (S->part <= S->nthr)
+    close(S->copn);
 
   hi = r;
   lo = 0;
@@ -1615,40 +1374,17 @@ int GoTo_Kmer_Entry(Kmer_Stream *_S, uint8 *entry)
   l -= lo;
   r -= lo;
 
-#ifdef ZSTD_KTAB
-  if (S->compressed)
-    { if (open_compressed_part(S, p) < 0)
-        { S->csuf = NULL;
-          S->cidx = S->nels;
-          S->cpre = S->ixlen;
-          S->part = S->nthr+1;
-          return (0);
-        }
-      S->part = p;
-      f = -1;  // Not used for compressed
-    }
-  else
-#endif
-    { sprintf(S->name+S->nlen,"%d",p);
-      f = open(S->name,O_RDONLY);
-      S->part = p;
-      S->copn = f;
-    }
+  sprintf(S->name+S->nlen,"%d",p);
+  f = open(S->name,O_RDONLY);
+  S->part = p;
+  S->copn = f;
 
   // smallest l s.t. KMER(l) >= entry  (or S->neps[p] if does not exist)
 
   while (r-l > STREAM_BLOCK)
     { m = ((l+r) >> 1);
-#ifdef ZSTD_KTAB
-      if (S->compressed)
-        { seek_compressed(S, m*pbyte);
-          read_compressed(S, kbuf, hbyte);
-        }
-      else
-#endif
-        { lseek(f,proff+m*pbyte,SEEK_SET);
-          read(f,kbuf,hbyte);
-        }
+      lseek(f,proff+m*pbyte,SEEK_SET);
+      read(f,kbuf,hbyte);
       if (mycmp(kbuf,entry,hbyte) < 0)
         l = m+1;
       else
@@ -1656,11 +1392,7 @@ int GoTo_Kmer_Entry(Kmer_Stream *_S, uint8 *entry)
     }
 
   if (l >= S->nels)
-    {
-#ifdef ZSTD_KTAB
-      if (!S->compressed)
-#endif
-        close(S->copn);
+    { close(S->copn);
       S->csuf = NULL;
       S->cidx = S->nels;
       S->cpre = S->ixlen;
@@ -1668,12 +1400,7 @@ int GoTo_Kmer_Entry(Kmer_Stream *_S, uint8 *entry)
       return (0);
     }
 
-#ifdef ZSTD_KTAB
-  if (S->compressed)
-    seek_compressed(S, l*pbyte);
-  else
-#endif
-    lseek(f,proff+l*pbyte,SEEK_SET);
+  lseek(f,proff+l*pbyte,SEEK_SET);
 
   More_Kmer_Stream(S);
   S->cidx = l + lo;
