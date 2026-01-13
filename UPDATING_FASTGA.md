@@ -8,8 +8,11 @@
 
 - **Subtree path**: `deps/fastga`
 - **Upstream repository**: `https://github.com/thegenemyers/FASTGA.git`
-- **Current commit**: `a3c1564` (includes GDB skeleton support)
+- **Current commit**: `6c5b8b6` (V1.5, includes ANO annotation support)
 - **Branch**: `main`
+
+**Note**: As of 2026-01-13, zstd compression support was removed to match upstream.
+Upstream FASTGA removed zstd-compressed ktab support in favor of simpler uncompressed indexes.
 
 ## When to Update
 
@@ -152,6 +155,7 @@ ONEview /tmp/verify.1aln | grep "^X " | head -3
 
 ## History
 
+- **2026-01-13**: Updated to commit `6c5b8b6` (V1.5), removed zstd support to match upstream
 - **2025-10-09**: Converted from git submodule to git subtree
 - **2025-10-09**: Updated to commit `a3c1564` for GDB skeleton support
 - Previous version used submodule at `ekg/FASTGA` branch `makefile-fixes`
