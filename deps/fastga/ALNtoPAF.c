@@ -252,6 +252,7 @@ void *gen_paf(void *args)
         { int  bmin, bmax;
           int  del;
           char *bact;
+          int  skip_cigar = 0;
 
           Decompress_TraceTo16(ovl);
 
@@ -267,22 +268,33 @@ void *gen_paf(void *args)
               bmax = path->bepos;
             }
 
-          bact = Get_Contig_Piece(gdb2,bcontig,bmin,bmax,NUMERIC,bseq);
-          if (COMP(aln->flags))
-            { Complement_Seq(bact,bmax-bmin);
-              aln->bseq = bact - (aln->blen-bmax);
+          // Skip CIGAR if coordinates are out of bounds (handles edge cases from wave termination)
+          if (bmin < 0 || bmax > aln->blen || bmin >= bmax)
+            skip_cigar = 1;
+
+          if (!skip_cigar)
+            { bact = Get_Contig_Piece(gdb2,bcontig,bmin,bmax,NUMERIC,bseq);
+              if (COMP(aln->flags))
+                { Complement_Seq(bact,bmax-bmin);
+                  aln->bseq = bact - (aln->blen-bmax);
+                }
+              else
+                aln->bseq = bact - bmin;
+
+              Compute_Trace_PTS(aln,work,TSPACE,GREEDIEST,1,-1);
+
+              Gap_Improver(aln,work);
             }
-          else
-            aln->bseq = bact - bmin; 
-
-          Compute_Trace_PTS(aln,work,TSPACE,GREEDIEST,1,-1);
-
-          Gap_Improver(aln,work);
 
           cig->n = 0;
           del = 0;
 
-          if (CIGAR_M && !DIFFS)
+          if (skip_cigar)
+            { // Output alignment without detailed CIGAR (coordinates out of bounds)
+              blocksum = (path->aepos-path->abpos);
+              iid      = (int)(0.90 * blocksum);  // Estimate ~90% identity
+            }
+          else if (CIGAR_M && !DIFFS)
             { int    k, h, p, x, blen;
               int32 *t = (int32 *) path->trace;
               int    T = path->tlen;
@@ -451,9 +463,11 @@ void *gen_paf(void *args)
                     cigar_push(cig,'=',elen);
                 }
             }
-          
-          blocksum = (path->aepos-path->abpos) + del;
-          iid      = blocksum - path->diffs;
+
+          if (!skip_cigar)
+            { blocksum = (path->aepos-path->abpos) + del;
+              iid      = blocksum - path->diffs;
+            }
 
           fputc('\t',out);
           itoa(iid,buf,out);

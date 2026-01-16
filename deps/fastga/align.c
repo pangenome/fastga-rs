@@ -432,6 +432,16 @@ static int forward_wave(_Work_Data *work, _Align_Spec *spec, Alignment *align,
         Pebble *pb;
 
         x = (mida+k)>>1;
+        // Bounds check: x must be >= 0 (for aseq[x]) and >= k (for bs[x])
+        if (x < 0 || x < k)
+          { V[k]  = -2;  // Mark dead
+            T[k]  = PATH_INT;
+            M[k]  = PATH_LEN;
+            HA[k] = -1;
+            NA[k] = 0;
+            bs += 1;
+            continue;
+          }
 
         if (avail >= cmax-1)
           { cmax  = ((int) (avail*1.2)) + 10000;
@@ -679,6 +689,15 @@ static int forward_wave(_Work_Data *work, _Align_Spec *spec, Alignment *align,
           b <<= 1;
 
           x = (c+k)>>1;
+          // Bounds check: x must be >= 0 (for aseq[x]) and >= k (for bs[x])
+          if (x < 0 || x < k)
+            { t  = T[k];
+              n  = M[k];
+              ua = HA[k];
+              V[k] = -2;  // Mark dead, will be trimmed
+              bs += 1;
+              continue;
+            }
           while (1)
             { c = bs[x];
               if (c == 4)
@@ -788,6 +807,10 @@ static int forward_wave(_Work_Data *work, _Align_Spec *spec, Alignment *align,
               low += 1;
             break;
           }
+
+      // If all diagonals were trimmed (hgh < low), terminate the wave
+      if (hgh < low)
+        break;
 
 #ifdef WAVE_STATS
       k = (hgh-low)+1;
@@ -956,6 +979,16 @@ static int reverse_wave(_Work_Data *work, _Align_Spec *spec, Alignment *align,
         Pebble *pb;
 
         x = (mida+k)>>1;
+        // Bounds check: x must be >= 0 (for aseq[x]) and >= k (for bs[x])
+        if (x < 0 || x < k)
+          { V[k]  = INT_MAX;  // Reverse wave: mark dead (smaller is better)
+            T[k]  = PATH_INT;
+            M[k]  = PATH_LEN;
+            HA[k] = -1;
+            NA[k] = 0;
+            bs -= 1;
+            continue;
+          }
 
         if (avail >= cmax-1)
           { cmax  = ((int) (avail*1.2)) + 10000;
@@ -1199,6 +1232,15 @@ static int reverse_wave(_Work_Data *work, _Align_Spec *spec, Alignment *align,
           b <<= 1;
 
           x = (c+k)>>1;
+          // Bounds check: x must be >= 0 (for aseq[x]) and >= k (for bs[x])
+          if (x < 0 || x < k)
+            { t  = T[k];
+              n  = M[k];
+              ua = HA[k];
+              V[k] = INT_MAX;  // Reverse wave: mark dead (smaller is better)
+              bs -= 1;
+              continue;
+            }
           while (1)
             { c = bs[x];
               if (c == 4)
@@ -1308,6 +1350,10 @@ static int reverse_wave(_Work_Data *work, _Align_Spec *spec, Alignment *align,
               low += 1;
             break;
           }
+
+      // If all diagonals were trimmed (hgh < low), terminate the wave
+      if (hgh < low)
+        break;
 
 #ifdef WAVE_STATS
       k = (hgh-low)+1;
@@ -1662,6 +1708,16 @@ static int forward_wrap(_Work_Data *work, _Align_Spec *spec, Alignment *align,
         Pebble *pb;
 
         x = (mida+k)>>1;
+        // Bounds check: x must be >= 0 and >= k
+        if (x < 0 || x < k)
+          { V[k]  = -2;  // Mark dead
+            T[k]  = PATH_INT;
+            M[k]  = PATH_LEN;
+            HA[k] = -1;
+            NA[k] = 0;
+            bs += 1;
+            continue;
+          }
 
         if (avail >= cmax-1)
           { cmax  = ((int) (avail*1.2)) + 10000;
@@ -1896,6 +1952,15 @@ static int forward_wrap(_Work_Data *work, _Align_Spec *spec, Alignment *align,
           b <<= 1;
 
           x = (c+k)>>1;
+          // Bounds check: x must be >= 0 (for aseq) and >= k (for bs[x])
+          if (x < 0 || x < k)
+            { t  = T[k];
+              n  = M[k];
+              ua = HA[k];
+              V[k] = -2;  // Mark dead, will be trimmed
+              bs += 1;
+              continue;
+            }
           p = x % tspace;
           while (1)
             { c = bs[x];
@@ -1991,6 +2056,10 @@ static int forward_wrap(_Work_Data *work, _Align_Spec *spec, Alignment *align,
               low += 1;
             break;
           }
+
+      // If all diagonals were trimmed (hgh < low), terminate the wave
+      if (hgh < low)
+        break;
 
 #ifdef WAVE_STATS
       k = (hgh-low)+1;
@@ -2154,6 +2223,16 @@ static int reverse_wrap(_Work_Data *work, _Align_Spec *spec, Alignment *align,
         Pebble *pb;
 
         x = (mida+k)>>1;
+        // Bounds check: x must be >= 0 and >= k
+        if (x < 0 || x < k)
+          { V[k]  = INT_MAX;  // Reverse wave: mark dead (smaller is better)
+            T[k]  = PATH_INT;
+            M[k]  = PATH_LEN;
+            HA[k] = -1;
+            NA[k] = 0;
+            bs -= 1;
+            continue;
+          }
 
         if (avail >= cmax-1)
           { cmax  = ((int) (avail*1.2)) + 10000;
@@ -2179,7 +2258,7 @@ static int reverse_wrap(_Work_Data *work, _Align_Spec *spec, Alignment *align,
         while (1)
           { c = bs[x];
             if (aseq[p] != c)
-              { if (c == 4) 
+              { if (c == 4)
                   { more  = 0;
                     if (bclip > k)
                       bclip = k;
@@ -2384,11 +2463,20 @@ static int reverse_wrap(_Work_Data *work, _Align_Spec *spec, Alignment *align,
           b <<= 1;
 
           x = (c+k)>>1;
+          // Bounds check: x must be >= 0 (for aseq) and >= k (for bs[x])
+          if (x < 0 || x < k)
+            { t  = T[k];
+              n  = M[k];
+              ua = HA[k];
+              V[k] = INT_MAX;  // Reverse wave: mark dead (smaller is better)
+              bs -= 1;
+              continue;
+            }
           p = x % tspace;
           while (1)
             { c = bs[x];
               if (aseq[p] != c)
-                { if (c == 4) 
+                { if (c == 4)
                     { more  = 0;
                       if (bclip > k)
                         bclip = k;
@@ -2479,6 +2567,10 @@ static int reverse_wrap(_Work_Data *work, _Align_Spec *spec, Alignment *align,
               low += 1;
             break;
           }
+
+      // If all diagonals were trimmed (hgh < low), terminate the wave
+      if (hgh < low)
+        break;
 
 #ifdef WAVE_STATS
       k = (hgh-low)+1;
@@ -2793,6 +2885,16 @@ static int forward_extend(_Work_Data *work, _Align_Spec *spec, Alignment *align,
         Pebble *pb;
 
         x = (mida+k)>>1;
+        // Bounds check: x must be >= 0 (for aseq[x]) and >= k (for bs[x])
+        if (x < 0 || x < k)
+          { V[k]  = -2;  // Mark dead
+            T[k]  = PATH_INT;
+            M[k]  = PATH_LEN;
+            HA[k] = -1;
+            NA[k] = 0;
+            bs += 1;
+            continue;
+          }
 
         if (avail >= cmax-1)
           { cmax  = ((int) (avail*1.2)) + 10000;
@@ -3040,6 +3142,15 @@ static int forward_extend(_Work_Data *work, _Align_Spec *spec, Alignment *align,
           b <<= 1;
 
           x = (c+k)>>1;
+          // Bounds check: x must be >= 0 (for aseq[x]) and >= k (for bs[x])
+          if (x < 0 || x < k)
+            { t  = T[k];
+              n  = M[k];
+              ua = HA[k];
+              V[k] = -2;  // Mark dead, will be trimmed
+              bs += 1;
+              continue;
+            }
           while (1)
             { c = bs[x];
               if (c == 4)
@@ -3149,6 +3260,10 @@ static int forward_extend(_Work_Data *work, _Align_Spec *spec, Alignment *align,
               low += 1;
             break;
           }
+
+      // If all diagonals were trimmed (hgh < low), terminate the wave
+      if (hgh < low)
+        break;
 
 #ifdef WAVE_STATS
       k = (hgh-low)+1;
@@ -3311,6 +3426,16 @@ static int reverse_extend(_Work_Data *work, _Align_Spec *spec, Alignment *align,
         Pebble *pb;
 
         x = (mida+k)>>1;
+        // Bounds check: x must be >= 0 (for aseq[x]) and >= k (for bs[x])
+        if (x < 0 || x < k)
+          { V[k]  = INT_MAX;  // Reverse wave: mark dead (smaller is better)
+            T[k]  = PATH_INT;
+            M[k]  = PATH_LEN;
+            HA[k] = -1;
+            NA[k] = 0;
+            bs -= 1;
+            continue;
+          }
 
         if (avail >= cmax-1)
           { cmax  = ((int) (avail*1.2)) + 10000;
@@ -3554,6 +3679,15 @@ static int reverse_extend(_Work_Data *work, _Align_Spec *spec, Alignment *align,
           b <<= 1;
 
           x = (c+k)>>1;
+          // Bounds check: x must be >= 0 (for aseq[x]) and >= k (for bs[x])
+          if (x < 0 || x < k)
+            { t  = T[k];
+              n  = M[k];
+              ua = HA[k];
+              V[k] = INT_MAX;  // Reverse wave: mark dead (smaller is better)
+              bs -= 1;
+              continue;
+            }
           while (1)
             { c = bs[x];
               if (c == 4)
@@ -3663,6 +3797,10 @@ static int reverse_extend(_Work_Data *work, _Align_Spec *spec, Alignment *align,
               low += 1;
             break;
           }
+
+      // If all diagonals were trimmed (hgh < low), terminate the wave
+      if (hgh < low)
+        break;
 
 #ifdef WAVE_STATS
       k = (hgh-low)+1;
