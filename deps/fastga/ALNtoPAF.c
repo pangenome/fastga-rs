@@ -181,6 +181,27 @@ void *gen_paf(void *args)
       ascaff = contigs1[acontig].scaf;
       bscaff = contigs2[bcontig].scaf;
 
+      // Early check for invalid coordinates - skip entire alignment if bounds are invalid
+      // This handles edge cases from wave algorithm where coordinates may be corrupted
+      { int bmin, bmax;
+
+        if (COMP(aln->flags))
+          { bmin = (aln->blen - path->bepos);
+            bmax = (aln->blen - path->bbpos);
+          }
+        else
+          { bmin = path->bbpos;
+            bmax = path->bepos;
+          }
+
+        // Skip alignment if any coordinates are out of bounds
+        if (bmin < 0 || bmax > aln->blen || bmin >= bmax ||
+            path->abpos < 0 || path->aepos > aln->alen || path->abpos >= path->aepos)
+          { alast = acontig;
+            continue;  // Skip this invalid alignment entirely - do not output with fake data
+          }
+      }
+
       aoff = contigs1[acontig].sbeg;
 
       if (SWAP_G)
@@ -252,7 +273,6 @@ void *gen_paf(void *args)
         { int  bmin, bmax;
           int  del;
           char *bact;
-          int  skip_cigar = 0;
 
           Decompress_TraceTo16(ovl);
 
@@ -268,33 +288,23 @@ void *gen_paf(void *args)
               bmax = path->bepos;
             }
 
-          // Skip CIGAR if coordinates are out of bounds (handles edge cases from wave termination)
-          if (bmin < 0 || bmax > aln->blen || bmin >= bmax)
-            skip_cigar = 1;
-
-          if (!skip_cigar)
-            { bact = Get_Contig_Piece(gdb2,bcontig,bmin,bmax,NUMERIC,bseq);
-              if (COMP(aln->flags))
-                { Complement_Seq(bact,bmax-bmin);
-                  aln->bseq = bact - (aln->blen-bmax);
-                }
-              else
-                aln->bseq = bact - bmin;
-
-              Compute_Trace_PTS(aln,work,TSPACE,GREEDIEST,1,-1);
-
-              Gap_Improver(aln,work);
+          // Coordinates are guaranteed valid by early check above
+          bact = Get_Contig_Piece(gdb2,bcontig,bmin,bmax,NUMERIC,bseq);
+          if (COMP(aln->flags))
+            { Complement_Seq(bact,bmax-bmin);
+              aln->bseq = bact - (aln->blen-bmax);
             }
+          else
+            aln->bseq = bact - bmin;
+
+          Compute_Trace_PTS(aln,work,TSPACE,GREEDIEST,1,-1);
+
+          Gap_Improver(aln,work);
 
           cig->n = 0;
           del = 0;
 
-          if (skip_cigar)
-            { // Output alignment without detailed CIGAR (coordinates out of bounds)
-              blocksum = (path->aepos-path->abpos);
-              iid      = (int)(0.90 * blocksum);  // Estimate ~90% identity
-            }
-          else if (CIGAR_M && !DIFFS)
+          if (CIGAR_M && !DIFFS)
             { int    k, h, p, x, blen;
               int32 *t = (int32 *) path->trace;
               int    T = path->tlen;
@@ -464,10 +474,8 @@ void *gen_paf(void *args)
                 }
             }
 
-          if (!skip_cigar)
-            { blocksum = (path->aepos-path->abpos) + del;
-              iid      = blocksum - path->diffs;
-            }
+          blocksum = (path->aepos-path->abpos) + del;
+          iid      = blocksum - path->diffs;
 
           fputc('\t',out);
           itoa(iid,buf,out);

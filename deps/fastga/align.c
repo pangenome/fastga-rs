@@ -546,6 +546,11 @@ static int forward_wave(_Work_Data *work, _Align_Spec *spec, Alignment *align,
       bclip = -INT32_MAX;
     }
 
+  // Safety check: if no valid diagonals were processed in 0-wave, the alignment is invalid
+  // This can happen when all diagonals fail bounds checking (x < 0 || x < k)
+  if (avail == 0)
+    return (2);  // Return error code 2 = no valid alignment found
+
 #ifdef DEBUG_WAVE
   printf("\nFORWARD WAVE:\n");
   print_wave(V,M,low,hgh,besta);
@@ -1091,6 +1096,11 @@ static int reverse_wave(_Work_Data *work, _Align_Spec *spec, Alignment *align,
       aclip = -INT32_MAX;
       bclip =  INT32_MAX;
     }
+
+  // Safety check: if no valid diagonals were processed in 0-wave, the alignment is invalid
+  // This can happen when all diagonals fail bounds checking (x < 0 || x < k)
+  if (avail == 0)
+    return (2);  // Return error code 2 = no valid alignment found
 
 #ifdef DEBUG_WAVE
   printf("\nREVERSE WAVE:\n");
@@ -1809,6 +1819,11 @@ static int forward_wrap(_Work_Data *work, _Align_Spec *spec, Alignment *align,
       bclip = -INT32_MAX;
     }
 
+  // Safety check: if no valid diagonals were processed in 0-wave, the alignment is invalid
+  // This can happen when all diagonals fail bounds checking (x < 0 || x < k)
+  if (avail == 0)
+    return (2);  // Return error code 2 = no valid alignment found
+
 #ifdef DEBUG_WAVE
   printf("\nFORWARD WAVE:\n");
   print_wave(V,M,low,hgh,besta);
@@ -2322,6 +2337,11 @@ static int reverse_wrap(_Work_Data *work, _Align_Spec *spec, Alignment *align,
         }
       bclip =  INT32_MAX;
     }
+
+  // Safety check: if no valid diagonals were processed in 0-wave, the alignment is invalid
+  // This can happen when all diagonals fail bounds checking (x < 0 || x < k)
+  if (avail == 0)
+    return (2);  // Return error code 2 = no valid alignment found
 
 #ifdef DEBUG_WAVE
   printf("\nREVERSE WAVE:\n");
@@ -2999,6 +3019,11 @@ static int forward_extend(_Work_Data *work, _Align_Spec *spec, Alignment *align,
       bclip = -INT32_MAX;
     }
 
+  // Safety check: if no valid diagonals were processed in 0-wave, the alignment is invalid
+  // This can happen when all diagonals fail bounds checking (x < 0 || x < k)
+  if (avail == 0)
+    return (2);  // Return error code 2 = no valid alignment found
+
 #ifdef DEBUG_WAVE
   printf("\nFORWARD WAVE:\n");
   print_wave(V,M,low,hgh,besta);
@@ -3538,6 +3563,11 @@ static int reverse_extend(_Work_Data *work, _Align_Spec *spec, Alignment *align,
       aclip = -INT32_MAX;
       bclip =  INT32_MAX;
     }
+
+  // Safety check: if no valid diagonals were processed in 0-wave, the alignment is invalid
+  // This can happen when all diagonals fail bounds checking (x < 0 || x < k)
+  if (avail == 0)
+    return (2);  // Return error code 2 = no valid alignment found
 
 #ifdef DEBUG_WAVE
   printf("\nREVERSE WAVE:\n");
