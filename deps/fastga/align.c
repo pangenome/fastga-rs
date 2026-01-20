@@ -1516,14 +1516,27 @@ int Local_Alignment(Alignment *align, Work_Data *ework, Align_Spec *espec,
 
   selfie = (align->aseq == align->bseq);
 
+  // Ensure valid diagonal range: k must be in [-anti, anti]
+  // For k outside this range, x = (anti+k)/2 or y = (anti-k)/2 becomes negative
+
+  // Ensure hgh <= anti (guarantees y >= 0 at k = hgh)
   while (((anti-hgh)>>1) < 0)
     hgh -= 1;
-   
+
+  // Ensure low >= -anti (guarantees x >= 0 at k = low)
+  while (((anti+low)>>1) < 0)
+    low += 1;
+
+  // If no valid diagonals remain, return error
+  if (low > hgh)
+    return (1);
+
   if (lbord < 0)
     { if (selfie && low >= 0)
         minp = 1;
       else
-        minp = -INT32_MAX;
+        // Constrain minp to -anti to prevent wave expansion into invalid x < 0 region
+        minp = -anti;
     }
   else
     minp = low-lbord;
@@ -1531,7 +1544,8 @@ int Local_Alignment(Alignment *align, Work_Data *ework, Align_Spec *espec,
     { if (selfie && hgh <= 0)
         maxp = -1;
       else
-        maxp = INT32_MAX;
+        // Constrain maxp to anti to prevent wave expansion into invalid y < 0 region
+        maxp = anti;
     }
   else
     maxp = hgh+hbord;
@@ -2739,15 +2753,29 @@ int Wrap_Around_Alignment(Alignment *align, Work_Data *ework, Align_Spec *espec,
   printf("\n");
 #endif
 
+  // Ensure valid diagonal range: k must be in [-anti, anti]
+  // For k outside this range, x = (anti+k)/2 or y = (anti-k)/2 becomes negative
+
+  // Ensure hgh <= anti (guarantees y >= 0 at k = hgh)
   while (((anti-hgh)>>1) < 0)
     hgh -= 1;
-   
+
+  // Ensure low >= -anti (guarantees x >= 0 at k = low)
+  while (((anti+low)>>1) < 0)
+    low += 1;
+
+  // If no valid diagonals remain, return error
+  if (low > hgh)
+    return (1);
+
   if (lbord < 0)
-    minp = -INT32_MAX;
+    // Constrain minp to -anti to prevent wave expansion into invalid x < 0 region
+    minp = -anti;
   else
     minp = low-lbord;
   if (hbord < 0)
-    maxp = INT32_MAX;
+    // Constrain maxp to anti to prevent wave expansion into invalid y < 0 region
+    maxp = anti;
   else
     maxp = hgh+hbord;
 
@@ -3975,12 +4003,19 @@ int Find_Extension(Alignment *align, Work_Data *ework, Align_Spec *espec,
   printf("\n");
 #endif
 
+  // Validate diagonal is within valid range [-anti, anti]
+  // For diag outside this range, x = (anti+diag)/2 or y = (anti-diag)/2 becomes negative
+  if (((anti+diag)>>1) < 0 || ((anti-diag)>>1) < 0)
+    return (1);  // Invalid diagonal for given anti-diagonal
+
   if (lbord < 0)
-    minp = -INT32_MAX;
+    // Constrain minp to -anti to prevent wave expansion into invalid x < 0 region
+    minp = -anti;
   else
     minp = diag-lbord;
   if (hbord < 0)
-    maxp = INT32_MAX;
+    // Constrain maxp to anti to prevent wave expansion into invalid y < 0 region
+    maxp = anti;
   else
     maxp = diag+hbord;
 
