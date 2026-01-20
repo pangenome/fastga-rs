@@ -432,6 +432,16 @@ static int forward_wave(_Work_Data *work, _Align_Spec *spec, Alignment *align,
         Pebble *pb;
 
         x = (mida+k)>>1;
+        // Bounds check: x must be >= 0 (for aseq[x]) and >= k (for bs[x])
+        if (x < 0 || x < k)
+          { V[k]  = -2;  // Mark dead
+            T[k]  = PATH_INT;
+            M[k]  = PATH_LEN;
+            HA[k] = -1;
+            NA[k] = 0;
+            bs += 1;
+            continue;
+          }
 
         if (avail >= cmax-1)
           { cmax  = ((int) (avail*1.2)) + 10000;
@@ -535,6 +545,11 @@ static int forward_wave(_Work_Data *work, _Align_Spec *spec, Alignment *align,
       aclip =  INT32_MAX;
       bclip = -INT32_MAX;
     }
+
+  // Safety check: if no valid diagonals were processed in 0-wave, the alignment is invalid
+  // This can happen when all diagonals fail bounds checking (x < 0 || x < k)
+  if (avail == 0)
+    return (2);  // Return error code 2 = no valid alignment found
 
 #ifdef DEBUG_WAVE
   printf("\nFORWARD WAVE:\n");
@@ -679,6 +694,15 @@ static int forward_wave(_Work_Data *work, _Align_Spec *spec, Alignment *align,
           b <<= 1;
 
           x = (c+k)>>1;
+          // Bounds check: x must be >= 0 (for aseq[x]) and >= k (for bs[x])
+          if (x < 0 || x < k)
+            { t  = T[k];
+              n  = M[k];
+              ua = HA[k];
+              V[k] = -2;  // Mark dead, will be trimmed
+              bs += 1;
+              continue;
+            }
           while (1)
             { c = bs[x];
               if (c == 4)
@@ -788,6 +812,10 @@ static int forward_wave(_Work_Data *work, _Align_Spec *spec, Alignment *align,
               low += 1;
             break;
           }
+
+      // If all diagonals were trimmed (hgh < low), terminate the wave
+      if (hgh < low)
+        break;
 
 #ifdef WAVE_STATS
       k = (hgh-low)+1;
@@ -956,6 +984,16 @@ static int reverse_wave(_Work_Data *work, _Align_Spec *spec, Alignment *align,
         Pebble *pb;
 
         x = (mida+k)>>1;
+        // Bounds check: x must be >= 0 (for aseq[x]) and >= k (for bs[x])
+        if (x < 0 || x < k)
+          { V[k]  = INT_MAX;  // Reverse wave: mark dead (smaller is better)
+            T[k]  = PATH_INT;
+            M[k]  = PATH_LEN;
+            HA[k] = -1;
+            NA[k] = 0;
+            bs -= 1;
+            continue;
+          }
 
         if (avail >= cmax-1)
           { cmax  = ((int) (avail*1.2)) + 10000;
@@ -1058,6 +1096,11 @@ static int reverse_wave(_Work_Data *work, _Align_Spec *spec, Alignment *align,
       aclip = -INT32_MAX;
       bclip =  INT32_MAX;
     }
+
+  // Safety check: if no valid diagonals were processed in 0-wave, the alignment is invalid
+  // This can happen when all diagonals fail bounds checking (x < 0 || x < k)
+  if (avail == 0)
+    return (2);  // Return error code 2 = no valid alignment found
 
 #ifdef DEBUG_WAVE
   printf("\nREVERSE WAVE:\n");
@@ -1199,6 +1242,15 @@ static int reverse_wave(_Work_Data *work, _Align_Spec *spec, Alignment *align,
           b <<= 1;
 
           x = (c+k)>>1;
+          // Bounds check: x must be >= 0 (for aseq[x]) and >= k (for bs[x])
+          if (x < 0 || x < k)
+            { t  = T[k];
+              n  = M[k];
+              ua = HA[k];
+              V[k] = INT_MAX;  // Reverse wave: mark dead (smaller is better)
+              bs -= 1;
+              continue;
+            }
           while (1)
             { c = bs[x];
               if (c == 4)
@@ -1308,6 +1360,10 @@ static int reverse_wave(_Work_Data *work, _Align_Spec *spec, Alignment *align,
               low += 1;
             break;
           }
+
+      // If all diagonals were trimmed (hgh < low), terminate the wave
+      if (hgh < low)
+        break;
 
 #ifdef WAVE_STATS
       k = (hgh-low)+1;
@@ -1460,14 +1516,27 @@ int Local_Alignment(Alignment *align, Work_Data *ework, Align_Spec *espec,
 
   selfie = (align->aseq == align->bseq);
 
+  // Ensure valid diagonal range: k must be in [-anti, anti]
+  // For k outside this range, x = (anti+k)/2 or y = (anti-k)/2 becomes negative
+
+  // Ensure hgh <= anti (guarantees y >= 0 at k = hgh)
   while (((anti-hgh)>>1) < 0)
     hgh -= 1;
-   
+
+  // Ensure low >= -anti (guarantees x >= 0 at k = low)
+  while (((anti+low)>>1) < 0)
+    low += 1;
+
+  // If no valid diagonals remain, return error
+  if (low > hgh)
+    return (1);
+
   if (lbord < 0)
     { if (selfie && low >= 0)
         minp = 1;
       else
-        minp = -INT32_MAX;
+        // Constrain minp to -anti to prevent wave expansion into invalid x < 0 region
+        minp = -anti;
     }
   else
     minp = low-lbord;
@@ -1475,7 +1544,8 @@ int Local_Alignment(Alignment *align, Work_Data *ework, Align_Spec *espec,
     { if (selfie && hgh <= 0)
         maxp = -1;
       else
-        maxp = INT32_MAX;
+        // Constrain maxp to anti to prevent wave expansion into invalid y < 0 region
+        maxp = anti;
     }
   else
     maxp = hgh+hbord;
@@ -1662,6 +1732,16 @@ static int forward_wrap(_Work_Data *work, _Align_Spec *spec, Alignment *align,
         Pebble *pb;
 
         x = (mida+k)>>1;
+        // Bounds check: x must be >= 0 and >= k
+        if (x < 0 || x < k)
+          { V[k]  = -2;  // Mark dead
+            T[k]  = PATH_INT;
+            M[k]  = PATH_LEN;
+            HA[k] = -1;
+            NA[k] = 0;
+            bs += 1;
+            continue;
+          }
 
         if (avail >= cmax-1)
           { cmax  = ((int) (avail*1.2)) + 10000;
@@ -1752,6 +1832,11 @@ static int forward_wrap(_Work_Data *work, _Align_Spec *spec, Alignment *align,
         }
       bclip = -INT32_MAX;
     }
+
+  // Safety check: if no valid diagonals were processed in 0-wave, the alignment is invalid
+  // This can happen when all diagonals fail bounds checking (x < 0 || x < k)
+  if (avail == 0)
+    return (2);  // Return error code 2 = no valid alignment found
 
 #ifdef DEBUG_WAVE
   printf("\nFORWARD WAVE:\n");
@@ -1896,6 +1981,15 @@ static int forward_wrap(_Work_Data *work, _Align_Spec *spec, Alignment *align,
           b <<= 1;
 
           x = (c+k)>>1;
+          // Bounds check: x must be >= 0 (for aseq) and >= k (for bs[x])
+          if (x < 0 || x < k)
+            { t  = T[k];
+              n  = M[k];
+              ua = HA[k];
+              V[k] = -2;  // Mark dead, will be trimmed
+              bs += 1;
+              continue;
+            }
           p = x % tspace;
           while (1)
             { c = bs[x];
@@ -1991,6 +2085,10 @@ static int forward_wrap(_Work_Data *work, _Align_Spec *spec, Alignment *align,
               low += 1;
             break;
           }
+
+      // If all diagonals were trimmed (hgh < low), terminate the wave
+      if (hgh < low)
+        break;
 
 #ifdef WAVE_STATS
       k = (hgh-low)+1;
@@ -2154,6 +2252,16 @@ static int reverse_wrap(_Work_Data *work, _Align_Spec *spec, Alignment *align,
         Pebble *pb;
 
         x = (mida+k)>>1;
+        // Bounds check: x must be >= 0 and >= k
+        if (x < 0 || x < k)
+          { V[k]  = INT_MAX;  // Reverse wave: mark dead (smaller is better)
+            T[k]  = PATH_INT;
+            M[k]  = PATH_LEN;
+            HA[k] = -1;
+            NA[k] = 0;
+            bs -= 1;
+            continue;
+          }
 
         if (avail >= cmax-1)
           { cmax  = ((int) (avail*1.2)) + 10000;
@@ -2179,7 +2287,7 @@ static int reverse_wrap(_Work_Data *work, _Align_Spec *spec, Alignment *align,
         while (1)
           { c = bs[x];
             if (aseq[p] != c)
-              { if (c == 4) 
+              { if (c == 4)
                   { more  = 0;
                     if (bclip > k)
                       bclip = k;
@@ -2243,6 +2351,11 @@ static int reverse_wrap(_Work_Data *work, _Align_Spec *spec, Alignment *align,
         }
       bclip =  INT32_MAX;
     }
+
+  // Safety check: if no valid diagonals were processed in 0-wave, the alignment is invalid
+  // This can happen when all diagonals fail bounds checking (x < 0 || x < k)
+  if (avail == 0)
+    return (2);  // Return error code 2 = no valid alignment found
 
 #ifdef DEBUG_WAVE
   printf("\nREVERSE WAVE:\n");
@@ -2384,11 +2497,20 @@ static int reverse_wrap(_Work_Data *work, _Align_Spec *spec, Alignment *align,
           b <<= 1;
 
           x = (c+k)>>1;
+          // Bounds check: x must be >= 0 (for aseq) and >= k (for bs[x])
+          if (x < 0 || x < k)
+            { t  = T[k];
+              n  = M[k];
+              ua = HA[k];
+              V[k] = INT_MAX;  // Reverse wave: mark dead (smaller is better)
+              bs -= 1;
+              continue;
+            }
           p = x % tspace;
           while (1)
             { c = bs[x];
               if (aseq[p] != c)
-                { if (c == 4) 
+                { if (c == 4)
                     { more  = 0;
                       if (bclip > k)
                         bclip = k;
@@ -2479,6 +2601,10 @@ static int reverse_wrap(_Work_Data *work, _Align_Spec *spec, Alignment *align,
               low += 1;
             break;
           }
+
+      // If all diagonals were trimmed (hgh < low), terminate the wave
+      if (hgh < low)
+        break;
 
 #ifdef WAVE_STATS
       k = (hgh-low)+1;
@@ -2627,15 +2753,29 @@ int Wrap_Around_Alignment(Alignment *align, Work_Data *ework, Align_Spec *espec,
   printf("\n");
 #endif
 
+  // Ensure valid diagonal range: k must be in [-anti, anti]
+  // For k outside this range, x = (anti+k)/2 or y = (anti-k)/2 becomes negative
+
+  // Ensure hgh <= anti (guarantees y >= 0 at k = hgh)
   while (((anti-hgh)>>1) < 0)
     hgh -= 1;
-   
+
+  // Ensure low >= -anti (guarantees x >= 0 at k = low)
+  while (((anti+low)>>1) < 0)
+    low += 1;
+
+  // If no valid diagonals remain, return error
+  if (low > hgh)
+    return (1);
+
   if (lbord < 0)
-    minp = -INT32_MAX;
+    // Constrain minp to -anti to prevent wave expansion into invalid x < 0 region
+    minp = -anti;
   else
     minp = low-lbord;
   if (hbord < 0)
-    maxp = INT32_MAX;
+    // Constrain maxp to anti to prevent wave expansion into invalid y < 0 region
+    maxp = anti;
   else
     maxp = hgh+hbord;
 
@@ -2793,6 +2933,16 @@ static int forward_extend(_Work_Data *work, _Align_Spec *spec, Alignment *align,
         Pebble *pb;
 
         x = (mida+k)>>1;
+        // Bounds check: x must be >= 0 (for aseq[x]) and >= k (for bs[x])
+        if (x < 0 || x < k)
+          { V[k]  = -2;  // Mark dead
+            T[k]  = PATH_INT;
+            M[k]  = PATH_LEN;
+            HA[k] = -1;
+            NA[k] = 0;
+            bs += 1;
+            continue;
+          }
 
         if (avail >= cmax-1)
           { cmax  = ((int) (avail*1.2)) + 10000;
@@ -2896,6 +3046,11 @@ static int forward_extend(_Work_Data *work, _Align_Spec *spec, Alignment *align,
       aclip =  INT32_MAX;
       bclip = -INT32_MAX;
     }
+
+  // Safety check: if no valid diagonals were processed in 0-wave, the alignment is invalid
+  // This can happen when all diagonals fail bounds checking (x < 0 || x < k)
+  if (avail == 0)
+    return (2);  // Return error code 2 = no valid alignment found
 
 #ifdef DEBUG_WAVE
   printf("\nFORWARD WAVE:\n");
@@ -3040,6 +3195,15 @@ static int forward_extend(_Work_Data *work, _Align_Spec *spec, Alignment *align,
           b <<= 1;
 
           x = (c+k)>>1;
+          // Bounds check: x must be >= 0 (for aseq[x]) and >= k (for bs[x])
+          if (x < 0 || x < k)
+            { t  = T[k];
+              n  = M[k];
+              ua = HA[k];
+              V[k] = -2;  // Mark dead, will be trimmed
+              bs += 1;
+              continue;
+            }
           while (1)
             { c = bs[x];
               if (c == 4)
@@ -3149,6 +3313,10 @@ static int forward_extend(_Work_Data *work, _Align_Spec *spec, Alignment *align,
               low += 1;
             break;
           }
+
+      // If all diagonals were trimmed (hgh < low), terminate the wave
+      if (hgh < low)
+        break;
 
 #ifdef WAVE_STATS
       k = (hgh-low)+1;
@@ -3311,6 +3479,16 @@ static int reverse_extend(_Work_Data *work, _Align_Spec *spec, Alignment *align,
         Pebble *pb;
 
         x = (mida+k)>>1;
+        // Bounds check: x must be >= 0 (for aseq[x]) and >= k (for bs[x])
+        if (x < 0 || x < k)
+          { V[k]  = INT_MAX;  // Reverse wave: mark dead (smaller is better)
+            T[k]  = PATH_INT;
+            M[k]  = PATH_LEN;
+            HA[k] = -1;
+            NA[k] = 0;
+            bs -= 1;
+            continue;
+          }
 
         if (avail >= cmax-1)
           { cmax  = ((int) (avail*1.2)) + 10000;
@@ -3413,6 +3591,11 @@ static int reverse_extend(_Work_Data *work, _Align_Spec *spec, Alignment *align,
       aclip = -INT32_MAX;
       bclip =  INT32_MAX;
     }
+
+  // Safety check: if no valid diagonals were processed in 0-wave, the alignment is invalid
+  // This can happen when all diagonals fail bounds checking (x < 0 || x < k)
+  if (avail == 0)
+    return (2);  // Return error code 2 = no valid alignment found
 
 #ifdef DEBUG_WAVE
   printf("\nREVERSE WAVE:\n");
@@ -3554,6 +3737,15 @@ static int reverse_extend(_Work_Data *work, _Align_Spec *spec, Alignment *align,
           b <<= 1;
 
           x = (c+k)>>1;
+          // Bounds check: x must be >= 0 (for aseq[x]) and >= k (for bs[x])
+          if (x < 0 || x < k)
+            { t  = T[k];
+              n  = M[k];
+              ua = HA[k];
+              V[k] = INT_MAX;  // Reverse wave: mark dead (smaller is better)
+              bs -= 1;
+              continue;
+            }
           while (1)
             { c = bs[x];
               if (c == 4)
@@ -3663,6 +3855,10 @@ static int reverse_extend(_Work_Data *work, _Align_Spec *spec, Alignment *align,
               low += 1;
             break;
           }
+
+      // If all diagonals were trimmed (hgh < low), terminate the wave
+      if (hgh < low)
+        break;
 
 #ifdef WAVE_STATS
       k = (hgh-low)+1;
@@ -3807,12 +4003,19 @@ int Find_Extension(Alignment *align, Work_Data *ework, Align_Spec *espec,
   printf("\n");
 #endif
 
+  // Validate diagonal is within valid range [-anti, anti]
+  // For diag outside this range, x = (anti+diag)/2 or y = (anti-diag)/2 becomes negative
+  if (((anti+diag)>>1) < 0 || ((anti-diag)>>1) < 0)
+    return (1);  // Invalid diagonal for given anti-diagonal
+
   if (lbord < 0)
-    minp = -INT32_MAX;
+    // Constrain minp to -anti to prevent wave expansion into invalid x < 0 region
+    minp = -anti;
   else
     minp = diag-lbord;
   if (hbord < 0)
-    maxp = INT32_MAX;
+    // Constrain maxp to anti to prevent wave expansion into invalid y < 0 region
+    maxp = anti;
   else
     maxp = diag+hbord;
 
