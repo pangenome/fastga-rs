@@ -88,8 +88,8 @@ pub enum OutputFormat {
 impl Default for Config {
     fn default() -> Self {
         Config {
-            min_alignment_length: 0,             // No filtering by default
-            min_identity: None,                  // No identity filtering by default
+            min_alignment_length: 0,                   // No filtering by default
+            min_identity: None,                        // No identity filtering by default
             num_threads: num_cpus::get().clamp(1, 32), // FastGA GIXmake supports max 32 threads
             chain_break: 2000,
             chain_min: 170,
