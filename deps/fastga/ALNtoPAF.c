@@ -181,6 +181,27 @@ void *gen_paf(void *args)
       ascaff = contigs1[acontig].scaf;
       bscaff = contigs2[bcontig].scaf;
 
+      // Early check for invalid coordinates - skip entire alignment if bounds are invalid
+      // This handles edge cases from wave algorithm where coordinates may be corrupted
+      { int bmin, bmax;
+
+        if (COMP(aln->flags))
+          { bmin = (aln->blen - path->bepos);
+            bmax = (aln->blen - path->bbpos);
+          }
+        else
+          { bmin = path->bbpos;
+            bmax = path->bepos;
+          }
+
+        // Skip alignment if any coordinates are out of bounds
+        if (bmin < 0 || bmax > aln->blen || bmin >= bmax ||
+            path->abpos < 0 || path->aepos > aln->alen || path->abpos >= path->aepos)
+          { alast = acontig;
+            continue;  // Skip this invalid alignment entirely - do not output with fake data
+          }
+      }
+
       aoff = contigs1[acontig].sbeg;
 
       if (SWAP_G)
@@ -267,13 +288,14 @@ void *gen_paf(void *args)
               bmax = path->bepos;
             }
 
+          // Coordinates are guaranteed valid by early check above
           bact = Get_Contig_Piece(gdb2,bcontig,bmin,bmax,NUMERIC,bseq);
           if (COMP(aln->flags))
             { Complement_Seq(bact,bmax-bmin);
               aln->bseq = bact - (aln->blen-bmax);
             }
           else
-            aln->bseq = bact - bmin; 
+            aln->bseq = bact - bmin;
 
           Compute_Trace_PTS(aln,work,TSPACE,GREEDIEST,1,-1);
 
@@ -451,7 +473,7 @@ void *gen_paf(void *args)
                     cigar_push(cig,'=',elen);
                 }
             }
-          
+
           blocksum = (path->aepos-path->abpos) + del;
           iid      = blocksum - path->diffs;
 
