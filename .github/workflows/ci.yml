@@ -11,26 +11,20 @@ env:
 
 jobs:
   test:
-    name: Test Suite
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           submodules: recursive
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
-        with:
-          toolchain: stable
 
-      - name: Cache cargo registry
-        uses: actions/cache@v3
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+      - uses: Swatinem/rust-cache@v2
 
       - name: Build
         run: cargo build --release
@@ -44,9 +38,7 @@ jobs:
 
       - name: Run tests
         run: |
-          # Set TMPDIR to GitHub's temp directory to avoid disk space issues
           export TMPDIR="${{ runner.temp }}"
-          echo "TMPDIR for tests: $TMPDIR"
           cargo test --release
 
       - name: Run clippy
@@ -54,23 +46,3 @@ jobs:
 
       - name: Check formatting
         run: cargo fmt -- --check
-
-  build:
-    name: Build Check
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        rust: [stable, beta, nightly]
-    steps:
-      - uses: actions/checkout@v3
-        with:
-          submodules: recursive
-
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          toolchain: ${{ matrix.rust }}
-
-      - name: Build
-        run: cargo build --verbose
-        continue-on-error: ${{ matrix.rust != 'stable' }}
