@@ -139,9 +139,13 @@ pub fn run_fastga_simple(
     cmd.arg(query_path);
     cmd.arg(target_path);
 
-    // Set ISOLATED PATH so FastGA can ONLY find its own utilities
-    // This prevents FastGA from accidentally using system binaries
-    cmd.env("PATH", bin_dir);
+    // Prepend FastGA binary directory to PATH so system() calls find GIXmake etc.
+    let bin_dir_str = bin_dir.to_string_lossy();
+    let path_with_bin = match std::env::var("PATH") {
+        Ok(current) => format!("{}:{}", bin_dir_str, current),
+        Err(_) => bin_dir_str.to_string(),
+    };
+    cmd.env("PATH", &path_with_bin);
 
     eprintln!("[FastGA] Running command: {cmd:?}");
 
@@ -191,8 +195,13 @@ where
     cmd.arg(query_path);
     cmd.arg(target_path);
 
-    // Set ISOLATED PATH so FastGA can ONLY find its own utilities
-    cmd.env("PATH", bin_dir);
+    // Prepend FastGA binary directory to PATH so system() calls find GIXmake etc.
+    let bin_dir_str = bin_dir.to_string_lossy();
+    let path_with_bin = match std::env::var("PATH") {
+        Ok(current) => format!("{}:{}", bin_dir_str, current),
+        Err(_) => bin_dir_str.to_string(),
+    };
+    cmd.env("PATH", &path_with_bin);
 
     let mut child = cmd
         .stdout(Stdio::piped())

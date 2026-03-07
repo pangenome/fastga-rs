@@ -3,7 +3,7 @@
 //! This module orchestrates FastGA utilities (FAtoGDB, GIXmake, FastGA)
 //! via system calls instead of FFI to avoid hanging issues.
 
-use crate::binary_finder::find_binary;
+use crate::binary_finder::{find_binary, get_binary_dir};
 use crate::error::{FastGAError, Result};
 use std::os::raw::{c_char, c_int};
 use std::path::Path;
@@ -16,6 +16,15 @@ static TEMP_FILE_COUNTER: AtomicU64 = AtomicU64::new(0);
 fn unique_temp_name() -> String {
     let count = TEMP_FILE_COUNTER.fetch_add(1, Ordering::SeqCst);
     format!("_tmp_{}_{}", std::process::id(), count)
+}
+
+/// Prepend a directory to the current PATH environment variable.
+fn prepend_to_path(dir: &Path) -> String {
+    let dir_str = dir.to_string_lossy();
+    match std::env::var("PATH") {
+        Ok(current) => format!("{}:{}", dir_str, current),
+        Err(_) => dir_str.to_string(),
+    }
 }
 
 // FFI bindings only for the core alignment function
@@ -119,10 +128,16 @@ impl FastGAOrchestrator {
         let temp_aln = working_dir.join(format!("{}.1aln", unique_temp_name()));
         let temp_aln_rel = temp_aln.file_name().unwrap();
 
+        // Get binary directory so FastGA's internal system() calls can find GIXmake etc.
+        let bin_dir = get_binary_dir().map_err(|e| FastGAError::Other(e.to_string()))?;
+        let path_with_bin = prepend_to_path(&bin_dir);
+
         // Build command first so we can log actual args
         let mut cmd = std::process::Command::new(&fastga_bin);
         // Set TMPDIR for ONEcode's internal temp files (OneTextSchema, etc.)
         cmd.env("TMPDIR", &self.temp_dir);
+        // Set PATH so FastGA can find GIXmake, FAtoGDB via system() calls
+        cmd.env("PATH", &path_with_bin);
         cmd.arg(format!("-1:{}", temp_aln_rel.to_string_lossy()))
             .arg(format!("-T{}", self.num_threads));
 
@@ -300,6 +315,10 @@ impl FastGAOrchestrator {
         let fastga_bin = find_binary("FastGA")?;
         let alnto_paf_bin = find_binary("ALNtoPAF")?;
 
+        // Get binary directory so FastGA's internal system() calls can find GIXmake etc.
+        let bin_dir = get_binary_dir().map_err(|e| FastGAError::Other(e.to_string()))?;
+        let path_with_bin = prepend_to_path(&bin_dir);
+
         // Set working directory to where the input files are and use relative paths
         let working_dir = query_path
             .parent()
@@ -320,6 +339,8 @@ impl FastGAOrchestrator {
         let mut cmd = std::process::Command::new(&fastga_bin);
         // Set TMPDIR for ONEcode's internal temp files (OneTextSchema, etc.)
         cmd.env("TMPDIR", &self.temp_dir);
+        // Set PATH so FastGA can find GIXmake, FAtoGDB via system() calls
+        cmd.env("PATH", &path_with_bin);
         cmd.arg(format!("-1:{}", temp_aln_rel.to_string_lossy()))
             .arg(format!("-T{}", self.num_threads));
 
