@@ -39,16 +39,9 @@ pub fn get_binary_path(binary_name: &str) -> Result<PathBuf> {
         return Ok(release_path);
     }
 
-    // Last resort: check if it's in PATH
-    if let Ok(output) = Command::new("which").arg(binary_name).output() {
-        if output.status.success() {
-            let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
-            return Ok(PathBuf::from(path));
-        }
-    }
-
     Err(FastGAError::Other(format!(
-        "FastGA binary '{binary_name}' not found. Please run 'cargo build' first."
+        "FastGA binary '{binary_name}' not found. It should have been built by \
+         fastga-rs build.rs. Try rebuilding with `cargo build --release`."
     )))
 }
 

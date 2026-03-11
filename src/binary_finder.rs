@@ -46,7 +46,9 @@ fn find_in_target_build(start_dir: &std::path::Path, name: &str) -> Option<PathB
 /// 1. Same directory as current executable (cargo install)
 /// 2. OUT_DIR from build.rs (development only)
 /// 3. Walk up from executable to target/ and scan build dirs
-/// 4. System PATH
+///
+/// The system PATH is intentionally NOT searched to avoid version
+/// mismatches with a globally installed FastGA.
 pub fn find_binary(name: &str) -> Result<PathBuf> {
     // 1. Try same directory as the current executable (for cargo install)
     if let Ok(exe_path) = std::env::current_exe() {
@@ -76,13 +78,9 @@ pub fn find_binary(name: &str) -> Result<PathBuf> {
         }
     }
 
-    // 4. Fall back to PATH (system-installed FastGA)
-    if let Ok(path) = which::which(name) {
-        return Ok(path);
-    }
-
     Err(FastGAError::Other(format!(
-        "{name} binary not found. Install FastGA utilities or ensure they're in PATH."
+        "{name} binary not found. It should have been built by fastga-rs build.rs. \
+         Try rebuilding with `cargo build --release`."
     )))
 }
 
