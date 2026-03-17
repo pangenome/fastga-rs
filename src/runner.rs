@@ -8,6 +8,15 @@ use crate::config::OutputFormat;
 use crate::error::{FastGAError, Result};
 use std::path::{Path, PathBuf};
 
+/// Prepend a directory to the current PATH environment variable.
+fn prepend_to_path(dir: &Path) -> String {
+    let dir_str = dir.to_string_lossy();
+    match std::env::var("PATH") {
+        Ok(current) => format!("{}:{}", dir_str, current),
+        Err(_) => dir_str.to_string(),
+    }
+}
+
 /// Orchestrator for running FastGA alignments via subprocess
 pub struct Orchestrator {
     pub config: crate::Config,
@@ -38,10 +47,11 @@ impl Orchestrator {
         // Find FastGA binary
         let fastga = find_fastga_binary()?;
 
-        // Get binary directory and set up ISOLATED PATH so FastGA can ONLY find its own utilities
-        // This prevents FastGA from accidentally using system binaries
+        // Get binary directory and prepend to PATH so FastGA's internal system() calls
+        // can find GIXmake, FAtoGDB, GIXrm etc., while keeping system utilities (rm, etc.)
+        // available for those tools' own system() calls.
         let binary_dir = crate::binary_finder::get_binary_dir()?;
-        let new_path = std::ffi::OsString::from(binary_dir.as_os_str());
+        let new_path = prepend_to_path(&binary_dir);
 
         // FIX 1: Create unique temp directory for FastGA's internal files (GDB, indexes, etc.)
         // This prevents race conditions when multiple FastGA instances run in parallel
