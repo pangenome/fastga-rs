@@ -88,7 +88,7 @@ static char  *ONE_ROOT;    //  -one option path
 
 static char *PATH1, *PATH2;   //  GDB & GIX are PATHx/ROOTx[GEXTNx|.gix]
 static char *ROOT1, *ROOT2;
-static char *GEXTN1, *GEXTN2;
+static char *GEXTN1 = ".1gdb", *GEXTN2 = ".1gdb";
 
 static char *SPATH1, *SPATH2; //  Path name of source if TYPEx <= IS_GDB
 static int   TYPE1,  TYPE2;   //  Type of source file (see DNAsource.h)
