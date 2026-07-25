@@ -55,24 +55,28 @@ static const char* get_tmpdir_path(void) {
         }
     }
 
+    // The upstream buffer holds the hardcoded "/tmp/..." path only. A $TMPDIR
+    // longer than 46 bytes overflows it, so grow it before rewriting the paths.
+    content = content.replace("char template[64] ;", "char template[4096] ;");
+
     // Replace hardcoded /tmp/ paths with dynamic temp directory
     // Pattern 1: sprintf (template, "/tmp/OneSchema.%d", getpid()) ;
     content = content.replace(
         r#"sprintf (template, "/tmp/OneSchema.%d", getpid())"#,
-        r#"sprintf (template, "%s/OneSchema.%d", get_tmpdir_path(), getpid())"#,
+        r#"snprintf (template, sizeof(template), "%s/OneSchema.%d", get_tmpdir_path(), getpid())"#,
     );
 
     // Pattern 2: strcpy (template, "/tmp/OneSchema.XXXXXX") ;
     content = content.replace(
         r#"strcpy (template, "/tmp/OneSchema.XXXXXX")"#,
-        r#"sprintf (template, "%s/OneSchema.XXXXXX", get_tmpdir_path())"#,
+        r#"snprintf (template, sizeof(template), "%s/OneSchema.XXXXXX", get_tmpdir_path())"#,
     );
 
     // Pattern 3: char template[] = "/tmp/OneTextSchema-XXXXXX" ;
     // Need to change fixed-size array to larger buffer for sprintf
     content = content.replace(
         r#"char template[] = "/tmp/OneTextSchema-XXXXXX""#,
-        r#"char template[4096]; sprintf(template, "%s/OneTextSchema-XXXXXX", get_tmpdir_path())"#,
+        r#"char template[4096]; snprintf(template, sizeof(template), "%s/OneTextSchema-XXXXXX", get_tmpdir_path())"#,
     );
 
     // Write patched content back
