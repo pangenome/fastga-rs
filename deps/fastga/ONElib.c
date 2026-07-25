@@ -322,14 +322,14 @@ OneSchema *oneSchemaCreateFromFile (const char *filename)
   // first load the universal header and footer (non-alphabetic) line types 
   // do this by writing their schema into a temporary file and parsing it into the base schema
   { errno = 0 ;
-    char template[64] ;
+    char template[4096] ;
 // #define VALGRIND_MACOS
 #ifdef VALGRIND_MACOS // MacOS valgrind is missing functions to make temp files it seems
-    sprintf (template, "%s/OneSchema.%d", get_tmpdir_path(), getpid()) ;
+    snprintf (template, sizeof(template), "%s/OneSchema.%d", get_tmpdir_path(), getpid()) ;
     vf->f = fopen (template, "w+") ;
     if (errno) die ("failed to open temporary file %s errno %d\n", template, errno) ;
 #else
-    sprintf (template, "%s/OneSchema.XXXXXX", get_tmpdir_path()) ;
+    snprintf (template, sizeof(template), "%s/OneSchema.XXXXXX", get_tmpdir_path()) ;
     int fd = mkstemp (template) ;
     if (errno) die ("failed to open temporary file %s errno %d\n", template, errno) ;
     vf->f = fdopen (fd, "w+") ;
@@ -412,7 +412,7 @@ OneSchema *oneSchemaCreateFromText (const char *text) // write to temp file and 
   // static char template[64] ;
   // sprintf (template, "/tmp/OneTextSchema-%d.schema", getpid()) ;
   
-  char template[4096]; sprintf(template, "%s/OneTextSchema-XXXXXX", get_tmpdir_path()) ;
+  char template[4096]; snprintf(template, sizeof(template), "%s/OneTextSchema-XXXXXX", get_tmpdir_path()) ;
   errno = 0 ;
   int fd = mkstemp(template) ;
   if (fd == -1) die ("failed to make temporary file %s for writing schema to - errno %d", template, errno) ;

@@ -36,10 +36,12 @@ jobs:
           echo "Contents of build directories:"
           ls -la target/release/build/fastga-rs-*/out/ || true
 
+      # Parallel FastGA processes segfault intermittently on Linux CI.
+      # See RACE_CONDITION_ANALYSIS.md; the documented workaround is one thread.
       - name: Run tests
         run: |
           export TMPDIR="${{ runner.temp }}"
-          cargo test --release
+          cargo test --release -- --test-threads=1
 
       - name: Run clippy
         run: cargo clippy -- -D warnings
