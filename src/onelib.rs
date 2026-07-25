@@ -439,7 +439,7 @@ impl AlnWriter {
     fn copy_gdb_records(input: &mut OneFile, output: &mut OneFile) -> Result<()> {
         unsafe {
             // Navigate to the first 'g' object (GDB group)
-            if !onecode::ffi::oneGoto(input.as_ptr(), 'g' as i8, 1) {
+            if !onecode::ffi::oneGoto(input.as_ptr(), 'g' as std::os::raw::c_char, 1) {
                 // No GDB in input - this is OK for some files
                 return Ok(());
             }
