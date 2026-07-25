@@ -621,11 +621,11 @@ impl AlnWriter {
         let a_id: i64 = aln
             .query_name
             .parse()
-            .with_context(|| format!("Query name '{}' is not a numeric ID", &aln.query_name))?;
+            .with_context(|| format!("Query name '{}' is not a numeric ID", aln.query_name))?;
         let b_id: i64 = aln
             .target_name
             .parse()
-            .with_context(|| format!("Target name '{}' is not a numeric ID", &aln.target_name))?;
+            .with_context(|| format!("Target name '{}' is not a numeric ID", aln.target_name))?;
 
         // Convert scaffold coordinates back to contig-relative coordinates
         // This reverses the transformation done by AlnReader
