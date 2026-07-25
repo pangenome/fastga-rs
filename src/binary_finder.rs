@@ -6,6 +6,17 @@
 use crate::error::{FastGAError, Result};
 use std::path::PathBuf;
 
+/// Private install directory next to the running executable:
+/// `<exe_dir>/../libexec/<exe_stem>/`.
+///
+/// Package managers use this to keep bundled FastGA binaries out of `bin/`,
+/// where they would collide with a separately packaged FastGA.
+fn libexec_dir(exe_path: &std::path::Path) -> Option<PathBuf> {
+    let exe_dir = exe_path.parent()?;
+    let stem = exe_path.file_stem()?;
+    Some(exe_dir.parent()?.join("libexec").join(stem))
+}
+
 /// Walk up from a directory to find `target/`, then search
 /// `target/{release,debug}/build/fastga-rs-*/out/` for the named binary.
 fn find_in_target_build(start_dir: &std::path::Path, name: &str) -> Option<PathBuf> {
@@ -44,8 +55,9 @@ fn find_in_target_build(start_dir: &std::path::Path, name: &str) -> Option<PathB
 ///
 /// Search order:
 /// 1. Same directory as current executable (cargo install)
-/// 2. OUT_DIR from build.rs (development only)
-/// 3. Walk up from executable to target/ and scan build dirs
+/// 2. `<exe_dir>/../libexec/<exe_stem>/` (packaged installs, e.g. conda)
+/// 3. OUT_DIR from build.rs (development only)
+/// 4. Walk up from executable to target/ and scan build dirs
 ///
 /// The system PATH is intentionally NOT searched to avoid version
 /// mismatches with a globally installed FastGA.
@@ -58,9 +70,17 @@ pub fn find_binary(name: &str) -> Result<PathBuf> {
                 return Ok(binary);
             }
         }
+
+        // 2. Private install directory, so packagers can keep these out of bin/
+        if let Some(dir) = libexec_dir(&exe_path) {
+            let binary = dir.join(name);
+            if binary.exists() {
+                return Ok(binary);
+            }
+        }
     }
 
-    // 2. Try OUT_DIR (compile-time env var, only works during build)
+    // 3. Try OUT_DIR (compile-time env var, only works during build)
     if let Ok(out_dir) = std::env::var("OUT_DIR") {
         let path = PathBuf::from(out_dir).join(name);
         if path.exists() {
@@ -68,7 +88,7 @@ pub fn find_binary(name: &str) -> Result<PathBuf> {
         }
     }
 
-    // 3. Walk up from current executable to find target/build/fastga-rs-*/out/
+    // 4. Walk up from current executable to find target/build/fastga-rs-*/out/
     if let Ok(exe_path) = std::env::current_exe() {
         let exe_path = exe_path.canonicalize().unwrap_or(exe_path);
         if let Some(exe_dir) = exe_path.parent() {
@@ -93,4 +113,21 @@ pub fn get_binary_dir() -> Result<PathBuf> {
         .parent()
         .map(|p| p.to_path_buf())
         .ok_or_else(|| FastGAError::Other("Cannot determine FastGA binary directory".to_string()))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::Path;
+
+    #[test]
+    fn libexec_dir_sits_beside_bin() {
+        let got = libexec_dir(Path::new("/opt/conda/bin/impg")).unwrap();
+        assert_eq!(got, PathBuf::from("/opt/conda/libexec/impg"));
+    }
+
+    #[test]
+    fn libexec_dir_needs_a_parent_of_the_bin_dir() {
+        assert_eq!(libexec_dir(Path::new("/impg")), None);
+    }
 }
