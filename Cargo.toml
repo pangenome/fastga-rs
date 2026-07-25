@@ -24,7 +24,7 @@ tempfile = "3.8"
 libc = "0.2"
 num_cpus = "1.16"
 nix = { version = "0.27", features = ["fs", "process"] }
-onecode = { git = "https://github.com/pangenome/onecode-rs" }
+onecode = { git = "https://github.com/pangenome/onecode-rs", rev = "5fa1e9333f18b311580f1346751c630c626d8342" }
 
 [build-dependencies]
 cc = "1.0"
