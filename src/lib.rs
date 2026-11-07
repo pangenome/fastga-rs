@@ -75,6 +75,15 @@ pub mod timeout;
 use error::Result;
 use std::path::Path;
 
+/// Directory of an input file. For a bare name like `a.fa`, `parent()` is
+/// `""`, which `current_dir` and `tempfile_in` reject: use `.` instead.
+pub(crate) fn input_dir(path: &Path) -> &Path {
+    match path.parent() {
+        Some(dir) if !dir.as_os_str().is_empty() => dir,
+        _ => Path::new("."),
+    }
+}
+
 pub use alignment::{Alignment, Alignments};
 // Use onecode-based implementation (NEW: supports sequence name extraction)
 pub use config::{Config, OutputFormat};
@@ -206,6 +215,14 @@ impl FastGA {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn input_dir_of_bare_name_is_current_dir() {
+        use std::path::Path;
+        assert_eq!(super::input_dir(Path::new("a.fa")), Path::new("."));
+        assert_eq!(super::input_dir(Path::new("d/a.fa")), Path::new("d"));
+        assert_eq!(super::input_dir(Path::new("/d/a.fa")), Path::new("/d"));
+    }
+
     use super::*;
 
     #[test]

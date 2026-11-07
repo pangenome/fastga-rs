@@ -61,9 +61,7 @@ impl Orchestrator {
             .map_err(|e| FastGAError::Other(format!("Failed to create temp directory: {e}")))?;
 
         // FIX 2: Use tempfile for .1aln output to guarantee uniqueness even under heavy contention
-        let working_dir = query_path
-            .parent()
-            .ok_or_else(|| FastGAError::Other("Cannot determine parent directory".to_string()))?;
+        let working_dir = crate::input_dir(query_path);
         let temp_aln_file = tempfile::Builder::new()
             .prefix("_tmp_")
             .suffix(".1aln")
@@ -151,9 +149,7 @@ impl Orchestrator {
         cmd.arg(query_path).arg(target_path);
 
         // Set working directory to where the input files are
-        if let Some(parent_dir) = query_path.parent() {
-            cmd.current_dir(parent_dir);
-        }
+        cmd.current_dir(crate::input_dir(query_path));
 
         eprintln!("[fastga] Executing: {cmd:?}");
 

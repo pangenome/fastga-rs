@@ -113,9 +113,7 @@ impl FastGAOrchestrator {
         let fastga_bin = find_binary("FastGA")?;
 
         // Set working directory to where the input files are and use relative paths
-        let working_dir = query_path
-            .parent()
-            .ok_or_else(|| FastGAError::Other("Cannot determine parent directory".to_string()))?;
+        let working_dir = crate::input_dir(query_path);
 
         let query_filename = query_path
             .file_name()
@@ -320,9 +318,7 @@ impl FastGAOrchestrator {
         let path_with_bin = prepend_to_path(&bin_dir);
 
         // Set working directory to where the input files are and use relative paths
-        let working_dir = query_path
-            .parent()
-            .ok_or_else(|| FastGAError::Other("Cannot determine parent directory".to_string()))?;
+        let working_dir = crate::input_dir(query_path);
 
         let query_filename = query_path
             .file_name()
