@@ -152,9 +152,7 @@ impl AlignmentPipeline {
         let target_fasta = target_db.with_extension("");
 
         // Determine working directory for temp .1aln file
-        let working_dir = query_fasta
-            .parent()
-            .ok_or_else(|| FastGAError::Other("Cannot determine parent directory".to_string()))?;
+        let working_dir = crate::input_dir(&query_fasta);
         let temp_aln = working_dir.join(format!("_tmp_{}.1aln", std::process::id()));
 
         // Step 1: Run FastGA to create .1aln file
