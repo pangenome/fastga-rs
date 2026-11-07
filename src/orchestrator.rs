@@ -234,8 +234,10 @@ impl FastGAOrchestrator {
             self.temp_dir
         );
 
+        let bin_dir = get_binary_dir().map_err(|e| FastGAError::Other(e.to_string()))?;
         let output = std::process::Command::new(&fatogdb_bin)
             .env("TMPDIR", &self.temp_dir)
+            .env("PATH", prepend_to_path(&bin_dir))
             .arg(fasta_path)
             .output()
             .map_err(|e| FastGAError::Other(format!("Failed to run FAtoGDB: {e}")))?;
@@ -278,8 +280,11 @@ impl FastGAOrchestrator {
             gdb_path
         );
 
+        // GIXmake runs FAtoGDB through system() when the GDB is missing
+        let bin_dir = get_binary_dir().map_err(|e| FastGAError::Other(e.to_string()))?;
         let output = std::process::Command::new(&gixmake_bin)
             .env("TMPDIR", &self.temp_dir)
+            .env("PATH", prepend_to_path(&bin_dir))
             .arg(format!("-T{}", self.num_threads))
             .arg(format!("-P{}", self.temp_dir))
             .arg(gdb_path)
