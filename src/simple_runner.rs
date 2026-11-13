@@ -1,6 +1,7 @@
 //! Simple runner that uses the FastGA binary directly via subprocess
 //! This avoids the FFI complexity and memory issues
 
+use crate::binary_finder::{find_in_build_dir, find_in_target_build};
 use crate::error::{FastGAError, Result};
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
@@ -15,28 +16,16 @@ fn find_fastga_binary() -> Result<PathBuf> {
     if let Ok(exe_path) = std::env::current_exe() {
         if let Some(exe_dir) = exe_path.parent() {
             // Check relative to test binary location
-            let search_dirs = vec![
+            let found = [
                 exe_dir.join("build"),
                 exe_dir.parent().unwrap_or(exe_dir).join("build"),
-            ];
-
-            for base_dir in search_dirs {
-                if base_dir.exists() {
-                    for entry in std::fs::read_dir(&base_dir)
-                        .unwrap_or_else(|_| std::fs::read_dir(".").unwrap())
-                        .flatten()
-                    {
-                        let name = entry.file_name();
-                        let name_str = name.to_string_lossy();
-                        if name_str.starts_with("fastga-rs-") {
-                            let fastga = entry.path().join("out/FastGA");
-                            if fastga.exists() {
-                                eprintln!("[FastGA] Using binary from build: {fastga:?}");
-                                return Ok(fastga);
-                            }
-                        }
-                    }
-                }
+            ]
+            .iter()
+            .find_map(|build| find_in_build_dir(build, "FastGA"))
+            .or_else(|| find_in_target_build(exe_dir, "FastGA"));
+            if let Some(fastga) = found {
+                eprintln!("[FastGA] Using binary from build: {fastga:?}");
+                return Ok(fastga);
             }
         }
     }
@@ -50,43 +39,16 @@ fn find_fastga_binary() -> Result<PathBuf> {
         }
     }
 
-    // Check in target/debug/build/*/out/
+    // Check target/{debug,release}/build of the manifest
     let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap_or_else(|_| ".".to_string());
-    let base = PathBuf::from(&manifest_dir);
-
-    // Try debug build
-    let pattern = base.join("target/debug/build");
-    if pattern.exists() {
-        if let Ok(entries) = std::fs::read_dir(&pattern) {
-            for entry in entries.flatten() {
-                let name = entry.file_name();
-                let name_str = name.to_string_lossy();
-                if name_str.starts_with("fastga-rs-") {
-                    let fastga = entry.path().join("out/FastGA");
-                    if fastga.exists() {
-                        eprintln!("[FastGA] Using binary from debug build: {fastga:?}");
-                        return Ok(fastga);
-                    }
-                }
-            }
-        }
-    }
-
-    // Try release build
-    let pattern = base.join("target/release/build");
-    if pattern.exists() {
-        if let Ok(entries) = std::fs::read_dir(&pattern) {
-            for entry in entries.flatten() {
-                let name = entry.file_name();
-                let name_str = name.to_string_lossy();
-                if name_str.starts_with("fastga-rs-") {
-                    let fastga = entry.path().join("out/FastGA");
-                    if fastga.exists() {
-                        eprintln!("[FastGA] Using binary from release build: {fastga:?}");
-                        return Ok(fastga);
-                    }
-                }
-            }
+    for profile in ["debug", "release"] {
+        let build = Path::new(&manifest_dir)
+            .join("target")
+            .join(profile)
+            .join("build");
+        if let Some(fastga) = find_in_build_dir(&build, "FastGA") {
+            eprintln!("[FastGA] Using binary from {profile} build: {fastga:?}");
+            return Ok(fastga);
         }
     }
 

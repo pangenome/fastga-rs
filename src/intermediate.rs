@@ -1,6 +1,7 @@
 //! API for exposing intermediate steps in the alignment pipeline
 //! This allows for debugging and fine-grained control over the alignment process
 
+use crate::binary_finder::{find_in_build_dir, find_in_target_build};
 use crate::error::{FastGAError, Result};
 use crate::Config;
 use std::path::{Path, PathBuf};
@@ -218,42 +219,13 @@ impl AlignmentPipeline {
                 .ok()
                 .map(|d| PathBuf::from(d).join(name)),
             // In current exe's build directory
-            std::env::current_exe()
-                .ok()
-                .and_then(|exe| {
-                    exe.parent()
-                        .and_then(|p| p.parent())
-                        .map(|p| p.join("build"))
-                })
-                .and_then(|build_dir| {
-                    std::fs::read_dir(&build_dir).ok().and_then(|entries| {
-                        for entry in entries.flatten() {
-                            let name_str = entry.file_name();
-                            if name_str.to_string_lossy().starts_with("fastga-rs-") {
-                                let util_path = entry.path().join("out").join(name);
-                                if util_path.exists() {
-                                    return Some(util_path);
-                                }
-                            }
-                        }
-                        None
-                    })
-                }),
-            // In target/debug/build
-            Some(PathBuf::from("target/debug/build")).and_then(|build_dir| {
-                std::fs::read_dir(&build_dir).ok().and_then(|entries| {
-                    for entry in entries.flatten() {
-                        let name_str = entry.file_name();
-                        if name_str.to_string_lossy().starts_with("fastga-rs-") {
-                            let util_path = entry.path().join("out").join(name);
-                            if util_path.exists() {
-                                return Some(util_path);
-                            }
-                        }
-                    }
-                    None
-                })
+            std::env::current_exe().ok().and_then(|exe| {
+                let exe_dir = exe.parent()?;
+                find_in_build_dir(&exe_dir.parent()?.join("build"), name)
+                    .or_else(|| find_in_target_build(exe_dir, name))
             }),
+            // In target/debug/build
+            find_in_build_dir(Path::new("target/debug/build"), name),
         ];
 
         for location in locations.into_iter().flatten() {

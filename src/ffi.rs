@@ -23,7 +23,7 @@ fn find_fastga_bin_dir() -> String {
     }
 
     // Try to find the OUT_DIR from the build
-    // The binaries are in target/{debug,release}/build/fastga-rs-*/out/
+    // The binaries are in an out/ under target/{debug,release}/build/
     if let Ok(exe) = std::env::current_exe() {
         let mut path = exe.parent().unwrap().to_path_buf();
 
@@ -41,19 +41,10 @@ fn find_fastga_bin_dir() -> String {
             };
             let build_dir = path.join(profile).join("build");
 
-            if build_dir.exists() {
-                // Find fastga-rs-* directory
-                if let Ok(entries) = std::fs::read_dir(&build_dir) {
-                    for entry in entries.flatten() {
-                        let name = entry.file_name();
-                        if name.to_string_lossy().starts_with("fastga-rs-") {
-                            let out_dir = entry.path().join("out");
-                            if out_dir.exists() && out_dir.join("FAtoGDB").exists() {
-                                return out_dir.to_string_lossy().to_string();
-                            }
-                        }
-                    }
-                }
+            if let Some(out_dir) = crate::binary_finder::find_in_build_dir(&build_dir, "FAtoGDB")
+                .and_then(|bin| Some(bin.parent()?.to_string_lossy().to_string()))
+            {
+                return out_dir;
             }
         }
     }
