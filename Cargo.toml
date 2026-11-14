@@ -2,6 +2,8 @@
 name = "fastga-rs"
 version = "0.1.2"
 edition = "2021"
+# Dependents read DEP_FASTGA_BINDIR in build.rs
+links = "fastga"
 authors = ["Erik Garrison <erik.garrison@gmail.com>"]
 license = "MIT"
 description = "Rust bindings for FastGA genome aligner with extended CIGAR support"
