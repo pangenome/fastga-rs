@@ -83,20 +83,20 @@ impl AlnReader {
         let schema = create_aln_schema()?;
         eprintln!("[AlnReader::open] Schema created");
 
-        let mut file = OneFile::open_read(path_str, Some(&schema), Some("aln"), 1)
-            .with_context(|| format!("Failed to open .1aln file: {path_str}"))?;
-        eprintln!("[AlnReader::open] File opened");
+        let open = || {
+            OneFile::open_read(path_str, Some(&schema), Some("aln"), 1)
+                .with_context(|| format!("Failed to open .1aln file: {path_str}"))
+        };
 
-        // Extract contig offset information from embedded GDB (for coordinate conversion)
-        eprintln!("[AlnReader::open] Getting contig offsets...");
-        let contig_offsets = file.get_all_contig_offsets();
+        // Extract contig offset information from embedded GDB (for coordinate conversion).
+        // This scan reads past the first 'A' line, so it gets its own handle
+        // and the reader starts from a fresh one.
+        let contig_offsets = open()?.get_all_contig_offsets();
         eprintln!(
             "[AlnReader::open] Got {} contig offsets",
             contig_offsets.len()
         );
-
-        // DON'T use goto() - just let read_alignment() scan from current position
-        // The file pointer is already at the beginning of alignments after get_all_contig_offsets()
+        let file = open()?;
 
         // Don't pre-count alignments (would require another scan)
         let num_alignments = -1; // Unknown until we scan
@@ -613,6 +613,60 @@ impl AlnWriter {
         }
 
         Ok(())
+    }
+
+    /// Copy the alignments of `input_path` that `keep` selects. Every line of
+    /// a kept record is copied unchanged, trace points included. `keep` gets
+    /// the 0-based rank of each 'A' record. Returns the number of records written.
+    pub fn copy_alignments_from<P: AsRef<Path>>(
+        &mut self,
+        input_path: P,
+        mut keep: impl FnMut(usize) -> bool,
+    ) -> Result<usize> {
+        let input_str = input_path.as_ref().to_str().context("Invalid input path")?;
+        let schema = create_aln_schema()?;
+        let mut input = OneFile::open_read(input_str, Some(&schema), Some("aln"), 1)?;
+        let (mut rank, mut copying, mut written) = (0usize, false, 0usize);
+        loop {
+            let line = input.read_line();
+            match line {
+                '\0' => break,
+                'A' => {
+                    copying = keep(rank);
+                    rank += 1;
+                    if copying {
+                        for i in 0..6 {
+                            self.file.set_int(i, input.int(i));
+                        }
+                        self.file.write_line('A', 0, None);
+                        written += 1;
+                    }
+                }
+                // Another object ends the alignment
+                'g' | 'S' | 'a' => copying = false,
+                _ if !copying => {}
+                'R' => self.file.write_line('R', 0, None),
+                'L' => {
+                    self.file.set_int(0, input.int(0));
+                    self.file.set_int(1, input.int(1));
+                    self.file.write_line('L', 0, None);
+                }
+                'D' | 'Q' | 'E' | 'U' => {
+                    self.file.set_int(0, input.int(0));
+                    self.file.write_line(line, 0, None);
+                }
+                'T' | 'X' => {
+                    let values = input.int_list().unwrap_or(&[]);
+                    let ptr = values.as_ptr() as *mut std::ffi::c_void;
+                    self.file.write_line(line, values.len() as i64, Some(ptr));
+                }
+                other => anyhow::bail!(
+                    "cannot copy .1aln line type '{other}' of alignment {}",
+                    rank - 1
+                ),
+            }
+        }
+        Ok(written)
     }
 
     /// Write an alignment to the file
