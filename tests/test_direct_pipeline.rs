@@ -151,24 +151,9 @@ fn test_prepare_and_align_separately() {
 }
 
 fn find_bin_dir() -> String {
-    // Try to find the build output directory
-    if let Ok(exe_path) = std::env::current_exe() {
-        if let Some(exe_dir) = exe_path.parent() {
-            let build_dir = exe_dir.join("build");
-            if build_dir.exists() {
-                if let Ok(entries) = std::fs::read_dir(&build_dir) {
-                    for entry in entries.flatten() {
-                        let name = entry.file_name();
-                        if name.to_string_lossy().starts_with("fastga-rs-") {
-                            let out_dir = entry.path().join("out");
-                            if out_dir.exists() {
-                                return out_dir.to_string_lossy().to_string();
-                            }
-                        }
-                    }
-                }
-            }
-        }
+    // Bundled binaries, either cargo layout
+    if let Ok(dir) = fastga_rs::binary_finder::get_binary_dir() {
+        return dir.to_string_lossy().to_string();
     }
 
     // Fallback
