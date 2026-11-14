@@ -220,4 +220,5 @@ fn main() {
     }
 
     println!("cargo:rustc-env=FASTGA_BIN_DIR={}", out_dir.display());
+    println!("cargo:bindir={}", out_dir.display());
 }
