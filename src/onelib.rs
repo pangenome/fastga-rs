@@ -71,7 +71,7 @@ pub struct AlnReader {
     pub file: OneFile,
     num_alignments: i64,
     contig_offsets: std::collections::HashMap<i64, (i64, i64)>, // contig_id → (sbeg, clen)
-    scaffold_lens: std::collections::HashMap<i64, i64>, // contig_id → scaffold length
+    scaffold_lens: std::collections::HashMap<i64, i64>,         // contig_id → scaffold length
 }
 
 impl AlnReader {
@@ -195,9 +195,10 @@ impl AlnReader {
 
             if query_len == 0 || target_len == 0 {
                 let len = |id: i64| {
-                    self.scaffold_lens.get(&id).map(|&l| l as u64).with_context(|| {
-                        format!("no 'L' line and no GDB length for contig {id}")
-                    })
+                    self.scaffold_lens
+                        .get(&id)
+                        .map(|&l| l as u64)
+                        .with_context(|| format!("no 'L' line and no GDB length for contig {id}"))
                 };
                 query_len = len(a_id)?;
                 target_len = len(b_id)?;
