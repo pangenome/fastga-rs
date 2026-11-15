@@ -1,0 +1,5 @@
+[submodule "deps/fastga"]
+	path = deps/fastga
+	url = https://github.com/AndreaGuarracino/FASTGA.git
+	branch = pangenome
+	ignore = dirty
