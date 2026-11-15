@@ -71,6 +71,7 @@ pub struct AlnReader {
     pub file: OneFile,
     num_alignments: i64,
     contig_offsets: std::collections::HashMap<i64, (i64, i64)>, // contig_id → (sbeg, clen)
+    scaffold_lens: std::collections::HashMap<i64, i64>,         // contig_id → scaffold length
 }
 
 impl AlnReader {
@@ -96,6 +97,8 @@ impl AlnReader {
             "[AlnReader::open] Got {} contig offsets",
             contig_offsets.len()
         );
+        // FastGA writes no 'L' line: take lengths from the GDB
+        let scaffold_lens = open()?.get_all_sequence_lengths();
         let file = open()?;
 
         // Don't pre-count alignments (would require another scan)
@@ -105,6 +108,7 @@ impl AlnReader {
             file,
             num_alignments,
             contig_offsets,
+            scaffold_lens,
         })
     }
 
@@ -187,6 +191,17 @@ impl AlnReader {
                         continue;
                     }
                 }
+            }
+
+            if query_len == 0 || target_len == 0 {
+                let len = |id: i64| {
+                    self.scaffold_lens
+                        .get(&id)
+                        .map(|&l| l as u64)
+                        .with_context(|| format!("no 'L' line and no GDB length for contig {id}"))
+                };
+                query_len = len(a_id)?;
+                target_len = len(b_id)?;
             }
 
             // Calculate identity using the SAME formula as ALNtoPAF
