@@ -83,7 +83,7 @@ fn copy_keeps_every_line_of_the_selected_records() {
     let input = dir.path().join("input.1aln");
     std::fs::copy(produced.trim(), &input).unwrap();
 
-    // The reader returns every record, the first included
+    // The reader returns every record, lengths from the GDB
     let read = AlnReader::open(&input).unwrap().read_all().unwrap();
     let total = read.len();
     let input_paf = paf_lines(&input);
@@ -91,7 +91,11 @@ fn copy_keeps_every_line_of_the_selected_records() {
     assert_eq!(input_paf.len(), total);
     for (aln, line) in read.iter().zip(&input_paf) {
         let f: Vec<&str> = line.split('\t').collect();
+        assert_eq!(aln.query_len.to_string(), f[1]);
+        assert_eq!(aln.query_start.to_string(), f[2]);
+        assert_eq!(aln.query_end.to_string(), f[3]);
         assert_eq!(aln.strand.to_string(), f[4]);
+        assert_eq!(aln.target_len.to_string(), f[6]);
         assert_eq!(aln.target_start.to_string(), f[7]);
         assert_eq!(aln.target_end.to_string(), f[8]);
     }
